@@ -13,6 +13,8 @@ class OptimizedPrompt(BaseModel):
 
 
 class Adapter:
+    PATCH_MARKER = "## 数据驱动策略补丁"
+
     def __init__(self):
         self.llm = ChatOpenAI(
             api_key=settings.DOUBAO_API_KEY,
@@ -47,6 +49,8 @@ class Adapter:
 
     def _generate_suggestions(self, role: str, analysis: Dict[str, Any]) -> List[str]:
         suggestions = []
+        role_analysis = analysis.get("role_analysis", {})
+        common_mistakes = analysis.get("common_mistakes", {}).get("counts", {})
         
         role_specific_suggestions = {
             "werewolf": [
@@ -82,9 +86,52 @@ class Adapter:
         
         win_rate = analysis.get("werewolf_win_rate", 0.5)
         if role == "werewolf" and win_rate < 0.5:
-            suggestions.append("当前狼人胜率偏低，需要更激进的策略")
+            suggestions.append(f"当前狼人胜率为{win_rate:.1%}，整体偏低，需要优先提升生存和白天抗推能力")
         elif role != "werewolf" and win_rate > 0.6:
-            suggestions.append("当前好人胜率偏低，需要加强防守策略")
+            suggestions.append(f"当前狼人胜率为{win_rate:.1%}，好人阵营防守不足，需要加强识狼和归票策略")
+
+        if role == "werewolf":
+            hiding = self._metric_score(role_analysis, "werewolf_hiding_ability")
+            kill = self._metric_score(role_analysis, "werewolf_kill_accuracy")
+            vote = self._metric_score(role_analysis, "werewolf_vote_strategy")
+            if hiding is not None and hiding < 0.4:
+                suggestions.append(f"历史数据显示狼人终局存活率仅{hiding:.1%}，白天发言要降低冲锋感，优先伪装闭眼好人并制造多个可疑目标")
+            if kill is not None and kill < 0.6:
+                suggestions.append(f"狼人夜刀神职命中率仅{kill:.1%}，夜晚应优先识别预言家、女巫、猎人的发言特征后再选择目标")
+            elif kill is not None and kill >= 0.75:
+                suggestions.append(f"狼人夜刀神职命中率已达{kill:.1%}，继续保持优先刀神职，但白天重点转向降低自身出局率")
+            if vote is not None and vote < 0.8:
+                suggestions.append(f"狼人白天投向好人阵营比例为{vote:.1%}，需要减少无意义倒钩和分票，集中火力推动好人出局")
+            if common_mistakes.get("werewolf_team_kill", 0) > 0:
+                suggestions.append("历史日志出现狼人误刀队友，夜晚行动必须再次核对队友身份，禁止选择狼人目标")
+
+        elif role == "seer":
+            check = self._metric_score(role_analysis, "seer_check_accuracy")
+            reveal = self._metric_score(role_analysis, "seer_reveal_timing")
+            if check is not None and check < 0.45:
+                suggestions.append(f"预言家查狼率为{check:.1%}，夜晚应优先查验警上悍跳、强站边、投票异常和发言逻辑跳跃的玩家")
+            if reveal is not None and reveal < 0.75:
+                suggestions.append(f"预言家报信息时机评分为{reveal:.1%}，有查杀或警徽流价值时应更早明确身份和查验结果")
+
+        elif role == "witch":
+            save = self._metric_score(role_analysis, "witch_save_usage")
+            poison = self._metric_score(role_analysis, "witch_poison_usage")
+            if save is not None and save < 0.8:
+                suggestions.append(f"女巫解药救好人率为{save:.1%}，首夜优先救疑似神职或高价值好人，避免无信息乱救")
+            if poison is not None and poison < 0.7:
+                suggestions.append(f"女巫毒药命中狼人率为{poison:.1%}，毒药应等待明确狼坑、票型冲锋或对跳信息后使用")
+            if common_mistakes.get("witch_poisoned_villager_team", 0) > 0:
+                suggestions.append("历史日志出现女巫毒到好人阵营，毒药使用前必须列出目标狼面证据，证据不足时宁可保留")
+
+        elif role == "hunter":
+            shot = self._metric_score(role_analysis, "hunter_shot_timing")
+            if shot is not None and shot < 0.6:
+                suggestions.append(f"猎人开枪命中狼人率为{shot:.1%}，开枪前优先结合投票、站边和对跳关系，避免带走低狼面的好人")
+
+        elif role == "villager":
+            vote = self._metric_score(role_analysis, "villager_vote_accuracy")
+            if vote is not None and vote < 0.5:
+                suggestions.append(f"村民投票命中狼人率为{vote:.1%}，发言和投票前必须基于警徽流、票型、站边和发言矛盾构造狼坑")
         
         return suggestions
 
@@ -126,10 +173,11 @@ class Adapter:
             })
             return result.model_dump()
         except Exception as e:
+            fallback_prompt = self._append_suggestions_patch(original_prompt, suggestions)
             return {
-                "optimized_prompt": original_prompt,
-                "reasoning": f"优化失败，使用原Prompt：{str(e)}",
-                "key_changes": [],
+                "optimized_prompt": fallback_prompt,
+                "reasoning": f"LLM优化失败，已使用确定性策略补丁：{str(e)}",
+                "key_changes": suggestions,
             }
 
     def create_tactical_prompt(self, role: str, tactic_type: str) -> str:
@@ -185,6 +233,14 @@ class Adapter:
 
     def create_evolution_summary(self, old_version: str, new_version: str, 
                             changes: List[str], analysis: Dict[str, Any]) -> str:
+        role_analysis = analysis.get("role_analysis", {})
+        metric_lines = []
+        for key, value in sorted(role_analysis.items()):
+            score = value.get("average_score")
+            sample_size = value.get("sample_size", 0)
+            if score is not None:
+                metric_lines.append(f"- {key}: {score:.2%} (样本 {sample_size})")
+
         summary = f"""
 # 策略进化报告
 
@@ -200,7 +256,24 @@ class Adapter:
 - 分析游戏数: {analysis.get('total_games', 0)}
 - 狼人胜率变化: {analysis.get('werewolf_win_rate', 0):.2%}
 
+## 关键指标
+{chr(10).join(metric_lines) if metric_lines else '- 暂无可用角色指标'}
+
 ## 预期效果
 希望通过本次优化，提升Agent的游戏表现和胜率。
 """
         return summary
+
+    def _metric_score(self, role_analysis: Dict[str, Any], key: str) -> Optional[float]:
+        metric = role_analysis.get(key)
+        if not metric:
+            return None
+        return metric.get("average_score")
+
+    def _append_suggestions_patch(self, original_prompt: str, suggestions: List[str]) -> str:
+        if not suggestions:
+            return original_prompt
+
+        base_prompt = original_prompt.split(self.PATCH_MARKER, 1)[0].rstrip()
+        patch = "\n".join(f"- {suggestion}" for suggestion in suggestions)
+        return f"{base_prompt}\n\n{self.PATCH_MARKER}\n以下规则来自历史对局指标，请优先执行：\n{patch}\n"
