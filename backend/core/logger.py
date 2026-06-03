@@ -82,6 +82,17 @@ class GameLogger:
         }
         self._append_log(game_state.game_id, log_entry)
 
+    def log_game_error(self, game_id, error, round_number=None, phase=None):
+        log_entry = {
+            "timestamp": datetime.now().isoformat(),
+            "type": "game_error",
+            "round_number": round_number,
+            "phase": phase,
+            "error_type": type(error).__name__,
+            "error": str(error),
+        }
+        self._append_log(game_id, log_entry)
+
     def _append_log(self, game_id, log_entry):
         log_path = self._get_log_path(game_id)
         with open(log_path, "a", encoding="utf-8") as f:
@@ -93,4 +104,3 @@ class GameLogger:
             return []
         with open(log_path, "r", encoding="utf-8") as f:
             return [json.loads(line) for line in f if line.strip()]
-

@@ -151,13 +151,22 @@ class WerewolfGame:
         }
     
     async def run(self) -> Team:
-        while self.state.winner is None:
-            await self._wait_if_paused()
-            await self._run_round()
-        
-        self.state.ended_at = datetime.now()
-        self.logger.log_game_end(self.state)
-        return self.state.winner
+        try:
+            while self.state.winner is None:
+                await self._wait_if_paused()
+                await self._run_round()
+            
+            self.state.ended_at = datetime.now()
+            self.logger.log_game_end(self.state)
+            return self.state.winner
+        except Exception as error:
+            self.logger.log_game_error(
+                self.game_id,
+                error,
+                round_number=self.state.current_round,
+                phase=self.state.current_phase.value,
+            )
+            raise
     
     async def _run_round(self):
         await self._wait_if_paused()

@@ -1,6 +1,8 @@
+import asyncio
 import json
 from collections import Counter
 
+import pytest
 from fastapi.testclient import TestClient
 
 from backend.api import routes
@@ -46,6 +48,32 @@ def test_api_can_create_game_and_read_status(tmp_path, monkeypatch):
     assert status["status"] == "ready"
     assert status["current_phase"] == "night"
     assert len(status["players"]) == 6
+
+
+def test_game_run_logs_errors(tmp_path, monkeypatch):
+    game = WerewolfGame(
+        ["Alice", "Bob", "Charlie", "David", "Eve", "Frank"],
+        GameLogger(log_dir=str(tmp_path)),
+    )
+
+    async def fail_round():
+        raise RuntimeError("simulated failure")
+
+    monkeypatch.setattr(game, "_run_round", fail_round)
+
+    with pytest.raises(RuntimeError, match="simulated failure"):
+        asyncio.run(game.run())
+
+    log_path = tmp_path / f"game_{game.game_id}.jsonl"
+    events = [
+        json.loads(line)
+        for line in log_path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+
+    assert events[-1]["type"] == "game_error"
+    assert events[-1]["error_type"] == "RuntimeError"
+    assert events[-1]["error"] == "simulated failure"
 
 
 def test_log_parser_extracts_complete_game(tmp_path):
