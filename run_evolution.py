@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import argparse
 import asyncio
 import sys
 import os
@@ -8,14 +9,32 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from backend.evolution import EvolutionController
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(description="Run the Werewolve self-evolution loop.")
+    parser.add_argument("--iterations", type=int, default=1, help="Number of evolution iterations to run.")
+    parser.add_argument("--train-games", type=int, default=1, help="Training games per iteration.")
+    parser.add_argument("--ab-games", type=int, default=1, help="A/B test games per iteration.")
+    parser.add_argument("--win-rate-threshold", type=float, default=0.05, help="Minimum win-rate improvement needed for acceptance.")
+    parser.add_argument("--skip-ab", action="store_true", help="Create a candidate version without running A/B validation.")
+    parser.add_argument("--dry-run", action="store_true", help="Skip live training games and A/B; only analyze logs and create a candidate version.")
+    parser.add_argument("--initial-version", default=None, help="Strategy version to start from.")
+    return parser.parse_args()
+
+
 async def main():
+    args = parse_args()
+
     print("=" * 80)
     print("AI 狼人杀 - 启动自进化循环")
     print("=" * 80)
     
     controller = EvolutionController(
-        num_games_per_iteration=2,
-        win_rate_threshold=0.05
+        initial_version=args.initial_version,
+        num_games_per_iteration=args.train_games,
+        ab_games=args.ab_games,
+        win_rate_threshold=args.win_rate_threshold,
+        skip_ab=args.skip_ab,
+        dry_run=args.dry_run,
     )
     
     print("\n初始化系统...")
@@ -31,12 +50,16 @@ async def main():
                 print(f"接受新版本: {result.get('accepted', False)}")
     
     print("\n" + "=" * 80)
-    print("开始进化循环（3次迭代）...")
+    print(f"开始进化循环（{args.iterations}次迭代）...")
+    print(f"训练局数/迭代: {args.train_games}")
+    print(f"A/B局数/迭代: {args.ab_games}")
+    print(f"跳过A/B: {args.skip_ab}")
+    print(f"dry-run: {args.dry_run}")
     print("=" * 80)
     
     try:
         result = await controller.start_evolution(
-            max_iterations=3,
+            max_iterations=args.iterations,
             progress_callback=progress_callback
         )
         

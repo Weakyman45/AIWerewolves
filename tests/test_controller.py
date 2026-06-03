@@ -69,3 +69,102 @@ def test_optimize_strategy_stores_role_metadata(tmp_path):
     assert "global suggestion" in metadata["changes"]
     assert "werewolf: werewolf change" in metadata["changes"]
     assert version_control.get_prompt(new_version, "seer").endswith("optimized for seer")
+
+
+def test_controller_dry_run_skips_training_and_ab(tmp_path):
+    version_control = VersionControl(strategy_dir=str(tmp_path))
+    version_control.create_version(
+        "v0.0.1",
+        prompts={
+            "werewolf": "werewolf prompt",
+            "seer": "seer prompt",
+            "witch": "witch prompt",
+            "hunter": "hunter prompt",
+            "villager": "villager prompt",
+        },
+    )
+
+    controller = EvolutionController(
+        initial_version="v0.0.1",
+        strategy_dir=str(tmp_path),
+        log_dir=str(tmp_path / "logs"),
+        dry_run=True,
+    )
+    controller.adapter = FakeAdapter()
+
+    result = asyncio.run(controller._run_evolution_iteration(1))
+
+    assert result["new_version"] == "v0.0.2"
+    assert result["accepted"] is False
+    assert result["ab_result"]["skipped"] is True
+    assert result["ab_result"]["reason"] == "dry-run"
+    assert result["analysis"]["game_count"] == 0
+    assert controller.version_control.get_latest_pointer() == "v0.0.1"
+
+
+def test_controller_skip_ab_creates_unaccepted_candidate(tmp_path):
+    version_control = VersionControl(strategy_dir=str(tmp_path))
+    version_control.create_version(
+        "v0.0.1",
+        prompts={
+            "werewolf": "werewolf prompt",
+            "seer": "seer prompt",
+            "witch": "witch prompt",
+            "hunter": "hunter prompt",
+            "villager": "villager prompt",
+        },
+    )
+
+    controller = EvolutionController(
+        initial_version="v0.0.1",
+        num_games_per_iteration=0,
+        strategy_dir=str(tmp_path),
+        log_dir=str(tmp_path / "logs"),
+        skip_ab=True,
+    )
+    controller.adapter = FakeAdapter()
+
+    result = asyncio.run(controller._run_evolution_iteration(1))
+
+    assert result["new_version"] == "v0.0.2"
+    assert result["accepted"] is False
+    assert result["ab_result"]["skipped"] is True
+    assert result["ab_result"]["reason"] == "skip_ab"
+    assert controller.version_control.get_latest_pointer() == "v0.0.1"
+
+
+def test_controller_uses_next_available_candidate_version(tmp_path):
+    version_control = VersionControl(strategy_dir=str(tmp_path))
+    prompts = {
+        "werewolf": "werewolf prompt",
+        "seer": "seer prompt",
+        "witch": "witch prompt",
+        "hunter": "hunter prompt",
+        "villager": "villager prompt",
+    }
+    version_control.create_version("v0.0.1", prompts=prompts)
+    version_control.create_version("v0.0.2", parent_version="v0.0.1", prompts=prompts)
+
+    controller = EvolutionController.__new__(EvolutionController)
+    controller.current_version = "v0.0.1"
+    controller.version_control = version_control
+    controller.adapter = FakeAdapter()
+
+    new_version = asyncio.run(
+        controller._optimize_strategy(
+            {
+                "aggregate": {
+                    "total_games": 0,
+                    "werewolf_win_rate": 0,
+                    "villager_win_rate": 0,
+                    "average_rounds": 0,
+                    "role_analysis": {},
+                    "common_mistakes": {},
+                },
+                "suggestions": [],
+            }
+        )
+    )
+
+    assert new_version == "v0.0.3"
+    assert version_control.version_exists("v0.0.3")

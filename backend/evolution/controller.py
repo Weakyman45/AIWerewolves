@@ -13,18 +13,24 @@ from backend.core.logger import GameLogger
 class EvolutionController:
     def __init__(self, initial_version: Optional[str] = None,
                  num_games_per_iteration: int = 20,
+                 ab_games: int = 10,
                  win_rate_threshold: float = 0.05,
+                 skip_ab: bool = False,
+                 dry_run: bool = False,
                  strategy_dir: Optional[str] = None,
                  log_dir: Optional[str] = None):
         self.parser = LogParser(log_dir)
         self.version_control = VersionControl(strategy_dir)
         self.analyzer = Analyzer()
         self.adapter = Adapter()
-        self.ab_testing = ABTesting()
+        self.ab_testing = ABTesting(strategy_dir)
         
         self.current_version = initial_version or self.version_control.get_latest_version()
         self.num_games_per_iteration = num_games_per_iteration
+        self.ab_games = ab_games
         self.win_rate_threshold = win_rate_threshold
+        self.skip_ab = skip_ab
+        self.dry_run = dry_run
         
         self.evolution_history = []
         self.is_running = False
@@ -95,8 +101,12 @@ class EvolutionController:
         print(f"\n=== 进化迭代 {iteration} ===")
         print(f"当前版本: {self.current_version}")
         
-        print("1. 生成训练对局...")
-        game_results = await self._generate_training_games()
+        if self.dry_run:
+            print("1. 生成训练对局... 跳过（dry-run）")
+            game_results = []
+        else:
+            print("1. 生成训练对局...")
+            game_results = await self._generate_training_games()
         
         print("2. 分析对局数据...")
         analysis = self._analyze_game_results(game_results)
@@ -104,17 +114,30 @@ class EvolutionController:
         print("3. 优化策略...")
         new_version = await self._optimize_strategy(analysis)
         
-        print("4. A/B测试验证...")
-        ab_result = await self._run_ab_test(new_version)
-        
-        print("5. 判断是否接受新版本...")
-        accepted = self._decide_acceptance(ab_result)
+        if self.skip_ab or self.dry_run:
+            print("4. A/B测试验证... 跳过")
+            ab_result = {
+                "skipped": True,
+                "reason": "dry-run" if self.dry_run else "skip_ab",
+                "a_win_rate": 0,
+                "b_win_rate": 0,
+                "statistics": {"significant": False, "p_value": 1.0},
+            }
+            accepted = False
+        else:
+            print("4. A/B测试验证...")
+            ab_result = await self._run_ab_test(new_version)
+            
+            print("5. 判断是否接受新版本...")
+            accepted = self._decide_acceptance(ab_result)
         
         if accepted:
             print(f"✓ 接受新版本 {new_version}")
             self.current_version = new_version
         else:
             print(f"✗ 拒绝新版本，保留 {self.current_version}")
+            if self.current_version:
+                self.version_control.rollback(self.current_version)
         
         return {
             "iteration": iteration,
@@ -185,7 +208,7 @@ class EvolutionController:
 
     async def _optimize_strategy(self, analysis: Dict[str, Any]) -> str:
         old_version = self.current_version
-        new_version = self.version_control.get_next_version(old_version)
+        new_version = self._get_next_available_version(old_version)
         
         print(f"  优化策略: {old_version} -> {new_version}")
         
@@ -234,13 +257,19 @@ class EvolutionController:
         
         return new_version
 
+    def _get_next_available_version(self, base_version: Optional[str]) -> str:
+        next_version = self.version_control.get_next_version(base_version)
+        while self.version_control.version_exists(next_version):
+            next_version = self.version_control.get_next_version(next_version)
+        return next_version
+
     async def _run_ab_test(self, new_version: str) -> Dict[str, Any]:
         old_version = self.current_version
         
         print(f"  A/B测试: {old_version} vs {new_version}")
         
         result = await self.ab_testing.run_comparison(
-            old_version, new_version, num_games=10
+            old_version, new_version, num_games=self.ab_games
         )
         
         stats = self.ab_testing.calculate_statistical_significance(result)
