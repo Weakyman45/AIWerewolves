@@ -1,13 +1,59 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 
 const API_BASE = 'http://localhost:8000/api'
 
 const defaultPlayerNames = ['Alice', 'Bob', 'Charlie', 'David', 'Eve', 'Frank', 'Grace', 'Henry', 'Ivy']
 
+type Player = {
+  id: string
+  name: string
+  role: string
+  is_alive: boolean
+  is_sheriff?: boolean
+  in_sheriff_election?: boolean
+}
+
+type GameStatus = {
+  game_id: string
+  status: string
+  winner?: string | null
+  players: Player[]
+  current_round: number
+  current_phase: string
+  error?: string | null
+  is_paused?: boolean
+}
+
+type GameLog = {
+  timestamp: string
+  type: string
+  round_number?: number
+  phase?: string
+  winner?: string
+  player_id?: string
+  player_name?: string
+  cause?: string
+  content?: string
+  action?: {
+    actor?: string
+    target?: string
+    action?: string
+    result?: string
+  }
+  vote?: {
+    voter?: string
+    target?: string
+  }
+}
+
+type StartGameResponse = {
+  game_id: string
+}
+
 function App() {
   const [gameId, setGameId] = useState<string | null>(null)
-  const [gameStatus, setGameStatus] = useState<any>(null)
-  const [logs, setLogs] = useState<any[]>([])
+  const [gameStatus, setGameStatus] = useState<GameStatus | null>(null)
+  const [logs, setLogs] = useState<GameLog[]>([])
   const [playerNames, setPlayerNames] = useState<string[]>(defaultPlayerNames)
   const [isLoading, setIsLoading] = useState(false)
   const logsEndRef = useRef<HTMLDivElement>(null)
@@ -26,7 +72,7 @@ function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ player_names: playerNames })
       })
-      const data = await response.json()
+      const data = await response.json() as StartGameResponse
       setGameId(data.game_id)
     } catch (error) {
       console.error('Error starting game:', error)
@@ -62,40 +108,43 @@ function App() {
     }
   }
 
-  const fetchStatus = async () => {
+  const fetchStatus = useCallback(async () => {
     if (!gameId) return
     try {
       const response = await fetch(`${API_BASE}/game/${gameId}/status`)
-      const data = await response.json()
+      const data = await response.json() as GameStatus
       setGameStatus(data)
     } catch (error) {
       console.error('Error fetching status:', error)
     }
-  }
+  }, [gameId])
 
-  const fetchLogs = async () => {
+  const fetchLogs = useCallback(async () => {
     if (!gameId) return
     try {
       const response = await fetch(`${API_BASE}/game/${gameId}/logs`)
-      const data = await response.json()
+      const data = await response.json() as { logs: GameLog[] }
       setLogs(data.logs)
     } catch (error) {
       console.error('Error fetching logs:', error)
     }
-  }
+  }, [gameId])
 
   useEffect(() => {
     if (!gameId) return
-    fetchStatus()
-    fetchLogs()
+    const refresh = () => {
+      void fetchStatus()
+      void fetchLogs()
+    }
     
-    const interval = setInterval(() => {
-      fetchStatus()
-      fetchLogs()
-    }, 2000)
+    const initialRefresh = window.setTimeout(refresh, 0)
+    const interval = window.setInterval(refresh, 2000)
     
-    return () => clearInterval(interval)
-  }, [gameId])
+    return () => {
+      window.clearTimeout(initialRefresh)
+      window.clearInterval(interval)
+    }
+  }, [gameId, fetchLogs, fetchStatus])
 
   const getRoleColor = (role: string) => {
     switch (role) {
@@ -354,7 +403,7 @@ function App() {
             gap: '20px',
             marginBottom: '40px'
           }}>
-            {gameStatus.players.map((player: any) => (
+            {gameStatus.players.map((player) => (
               <div
                 key={player.id}
                 style={{
@@ -475,14 +524,14 @@ function App() {
                   </span>
                   <span style={{ color: '#ddd' }}>
                     {log.type === 'game_start' && '游戏开始'}
-                    {log.type === 'phase_change' && `第${log.round_number}回合 - ${getPhaseName(log.phase)}`}
+                    {log.type === 'phase_change' && `第${log.round_number}回合 - ${getPhaseName(log.phase ?? '')}`}
                     {log.type === 'game_end' && `游戏结束 - ${log.winner === 'werewolves' ? '狼人' : '好人'}获胜`}
-                    {log.type === 'death' && `${log.player_name || gameStatus?.players?.find((p: any) => p.id === log.player_id)?.name} 死亡 (${log.cause})`}
-                    {log.type === 'night_action' && `${gameStatus?.players?.find((p: any) => p.id === log.action?.actor)?.name} ${log.action?.action === 'kill' ? '刀' : log.action?.action === 'check' ? '查验' : log.action?.action === 'save' ? '救' : log.action?.action === 'poison' ? '毒' : log.action?.action} ${gameStatus?.players?.find((p: any) => p.id === log.action?.target)?.name}${log.action?.result ? ` (结果: ${log.action.result === 'werewolf' ? '狼人' : '好人'})` : ''}`}
-                    {log.type === 'vote' && `${gameStatus?.players?.find((p: any) => p.id === log.vote?.voter)?.name} 投给 ${gameStatus?.players?.find((p: any) => p.id === log.vote?.target)?.name}`}
+                    {log.type === 'death' && `${log.player_name || gameStatus?.players?.find((p) => p.id === log.player_id)?.name} 死亡 (${log.cause})`}
+                    {log.type === 'night_action' && `${gameStatus?.players?.find((p) => p.id === log.action?.actor)?.name} ${log.action?.action === 'kill' ? '刀' : log.action?.action === 'check' ? '查验' : log.action?.action === 'save' ? '救' : log.action?.action === 'poison' ? '毒' : log.action?.action} ${gameStatus?.players?.find((p) => p.id === log.action?.target)?.name}${log.action?.result ? ` (结果: ${log.action.result === 'werewolf' ? '狼人' : '好人'})` : ''}`}
+                    {log.type === 'vote' && `${gameStatus?.players?.find((p) => p.id === log.vote?.voter)?.name} 投给 ${gameStatus?.players?.find((p) => p.id === log.vote?.target)?.name}`}
                     {log.type === 'speech' && (
                       <div>
-                        <strong>{log.player_name || gameStatus?.players?.find((p: any) => p.id === log.player_id)?.name} 发言:</strong>
+                        <strong>{log.player_name || gameStatus?.players?.find((p) => p.id === log.player_id)?.name} 发言:</strong>
                         <div style={{ marginTop: '4px', fontSize: '0.95rem', opacity: 0.9 }}>
                           {log.content}
                         </div>
@@ -490,7 +539,7 @@ function App() {
                     )}
                     {log.type === 'sheriff_speech' && (
                       <div>
-                        <strong>{log.player_name || gameStatus?.players?.find((p: any) => p.id === log.player_id)?.name} 警上发言:</strong>
+                        <strong>{log.player_name || gameStatus?.players?.find((p) => p.id === log.player_id)?.name} 警上发言:</strong>
                         <div style={{ marginTop: '4px', fontSize: '0.95rem', opacity: 0.9 }}>
                           {log.content}
                         </div>
@@ -498,7 +547,7 @@ function App() {
                     )}
                     {log.type === 'pk_speech' && (
                       <div>
-                        <strong>{log.player_name || gameStatus?.players?.find((p: any) => p.id === log.player_id)?.name} PK发言:</strong>
+                        <strong>{log.player_name || gameStatus?.players?.find((p) => p.id === log.player_id)?.name} PK发言:</strong>
                         <div style={{ marginTop: '4px', fontSize: '0.95rem', opacity: 0.9 }}>
                           {log.content}
                         </div>
@@ -506,7 +555,7 @@ function App() {
                     )}
                     {log.type === 'last_words' && (
                       <div>
-                        <strong>{log.player_name || gameStatus?.players?.find((p: any) => p.id === log.player_id)?.name} 遗言:</strong>
+                        <strong>{log.player_name || gameStatus?.players?.find((p) => p.id === log.player_id)?.name} 遗言:</strong>
                         <div style={{ marginTop: '4px', fontSize: '0.95rem', opacity: 0.9 }}>
                           {log.content}
                         </div>
