@@ -39,7 +39,8 @@ class VersionControl:
 
     def create_version(self, version: str, parent_version: Optional[str] = None, 
                   prompts: Optional[Dict[str, str]] = None,
-                  changes: Optional[List[str]] = None) -> bool:
+                  changes: Optional[List[str]] = None,
+                  metadata_extra: Optional[Dict[str, Any]] = None) -> bool:
         if self.version_exists(version):
             return False
 
@@ -71,6 +72,8 @@ class VersionControl:
                 "villagers": 0.5
             }
         }
+        if metadata_extra:
+            metadata.update(metadata_extra)
 
         metadata_file = os.path.join(version_path, "metadata.json")
         with open(metadata_file, "w", encoding="utf-8") as f:

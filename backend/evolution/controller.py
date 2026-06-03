@@ -190,6 +190,7 @@ class EvolutionController:
         print(f"  优化策略: {old_version} -> {new_version}")
         
         prompts = {}
+        role_optimizations = {}
         for role in ["werewolf", "seer", "witch", "hunter", "villager"]:
             original_prompt = self.version_control.get_prompt(old_version, role)
             if original_prompt:
@@ -197,16 +198,38 @@ class EvolutionController:
                     original_prompt, role, analysis["aggregate"]
                 )
                 prompts[role] = optimization["optimized"]
+                role_optimizations[role] = {
+                    "reasoning": optimization.get("reasoning", ""),
+                    "key_changes": optimization.get("key_changes", []),
+                }
         
         changes = []
         for suggestion in analysis["suggestions"]:
             changes.append(suggestion.get("suggestion", ""))
+        for role, optimization in role_optimizations.items():
+            for change in optimization.get("key_changes", []):
+                changes.append(f"{role}: {change}")
+        changes = list(dict.fromkeys(change for change in changes if change))
+
+        aggregate = analysis["aggregate"]
+        metadata_extra = {
+            "analysis_summary": {
+                "total_games": aggregate.get("total_games", 0),
+                "werewolf_win_rate": aggregate.get("werewolf_win_rate", 0),
+                "villager_win_rate": aggregate.get("villager_win_rate", 0),
+                "average_rounds": aggregate.get("average_rounds", 0),
+                "role_analysis": aggregate.get("role_analysis", {}),
+                "common_mistakes": aggregate.get("common_mistakes", {}),
+            },
+            "role_optimizations": role_optimizations,
+        }
         
         self.version_control.create_version(
             version=new_version,
             parent_version=old_version,
             prompts=prompts,
-            changes=changes
+            changes=changes,
+            metadata_extra=metadata_extra,
         )
         
         return new_version
