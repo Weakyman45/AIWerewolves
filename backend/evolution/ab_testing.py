@@ -4,11 +4,13 @@ from typing import Dict, List, Any, Optional, Callable
 from collections import defaultdict
 from backend.engine.game import WerewolfGame
 from backend.core.logger import GameLogger
+from backend.evolution.version_control import VersionControl
 
 
 class ABTesting:
-    def __init__(self):
+    def __init__(self, strategy_dir: Optional[str] = None):
         self.results = []
+        self.version_control = VersionControl(strategy_dir)
 
     async def run_comparison(self, version_a: str, version_b: str, 
                          num_games: int = 10,
@@ -73,7 +75,8 @@ class ABTesting:
                           player_names: List[str],
                           a_as_werewolves: bool) -> str:
         logger = GameLogger()
-        game = WerewolfGame(player_names, logger)
+        strategy_prompts = self._build_strategy_prompts(werewolf_version, other_version)
+        game = WerewolfGame(player_names, logger, strategy_prompts=strategy_prompts)
         
         try:
             winner = await game.run()
@@ -81,6 +84,18 @@ class ABTesting:
         except Exception as e:
             print(f"游戏运行出错: {e}")
             return random.choice(["werewolves", "villagers"])
+
+    def _build_strategy_prompts(self, werewolf_version: str, other_version: str) -> Dict[str, str]:
+        prompts = {}
+        werewolf_prompt = self.version_control.get_prompt(werewolf_version, "werewolf")
+        if werewolf_prompt:
+            prompts["werewolf"] = werewolf_prompt
+
+        for role in ["seer", "witch", "hunter", "villager"]:
+            prompt = self.version_control.get_prompt(other_version, role)
+            if prompt:
+                prompts[role] = prompt
+        return prompts
 
     def _determine_better_version(self, a_wins: int, b_wins: int, 
                               version_a: str, version_b: str) -> Optional[str]:

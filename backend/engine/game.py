@@ -26,10 +26,16 @@ from backend.core.logger import GameLogger
 
 
 class WerewolfGame:
-    def __init__(self, player_names: List[str], logger: Optional[GameLogger] = None):
+    def __init__(
+        self,
+        player_names: List[str],
+        logger: Optional[GameLogger] = None,
+        strategy_prompts: Optional[Dict[str, str]] = None,
+    ):
         self.game_id = str(uuid.uuid4())
         self.logger = logger or GameLogger()
         self.player_names = player_names
+        self.strategy_prompts = strategy_prompts or {}
         self.players: Dict[str, BaseAgent] = {}
         self.player_states: Dict[str, PlayerState] = {}
         self.state = GameState(game_id=self.game_id)
@@ -66,7 +72,12 @@ class WerewolfGame:
         roles = self._assign_roles(len(self.player_names))
         for i, (name, role) in enumerate(zip(self.player_names, roles)):
             player_id = f"player_{i}"
-            agent = AgentFactory.create_agent(role, player_id, name)
+            agent = AgentFactory.create_agent(
+                role,
+                player_id,
+                name,
+                self.strategy_prompts.get(role.value),
+            )
             self.players[player_id] = agent
             self.player_states[player_id] = PlayerState(
                 player_id=player_id,

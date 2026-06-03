@@ -21,6 +21,7 @@ class BaseAgent(ABC):
         self.player_id = player_id
         self.name = name
         self.role = role
+        self.system_prompt_override: Optional[str] = None
         self.llm = ChatOpenAI(
             api_key=settings.DOUBAO_API_KEY,
             base_url=settings.DOUBAO_BASE_URL,
@@ -33,6 +34,12 @@ class BaseAgent(ABC):
     @abstractmethod
     def get_system_prompt(self) -> str:
         pass
+
+    def set_system_prompt_override(self, prompt: Optional[str]):
+        self.system_prompt_override = prompt
+
+    def get_effective_system_prompt(self) -> str:
+        return self.system_prompt_override or self.get_system_prompt()
 
     @abstractmethod
     async def make_night_action(self, game_state: Dict[str, Any]) -> AgentDecision:
@@ -318,7 +325,7 @@ class BaseAgent(ABC):
         parser = JsonOutputParser(pydantic_object=AgentAction)
         
         prompt = ChatPromptTemplate.from_messages([
-            ("system", self.get_system_prompt()),
+            ("system", self.get_effective_system_prompt()),
             ("system", "你需要根据游戏状态做出决策。请以JSON格式输出，格式如下：\n{format_instructions}"),
             ("user", "{game_state}\n\n当前需要做出的决策类型：{action_type}\n{extra_instructions}")
         ])

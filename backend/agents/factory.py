@@ -9,17 +9,18 @@ from backend.agents.roles.villager import VillagerAgent
 
 class AgentFactory:
     @staticmethod
-    def create_agent(role, player_id, name):
+    def create_agent(role, player_id, name, system_prompt=None):
         if role == Role.WEREWOLF:
-            return WerewolfAgent(player_id, name)
+            agent = WerewolfAgent(player_id, name)
         elif role == Role.SEER:
-            return SeerAgent(player_id, name)
+            agent = SeerAgent(player_id, name)
         elif role == Role.WITCH:
-            return WitchAgent(player_id, name)
+            agent = WitchAgent(player_id, name)
         elif role == Role.HUNTER:
-            return HunterAgent(player_id, name)
+            agent = HunterAgent(player_id, name)
         elif role == Role.VILLAGER:
-            return VillagerAgent(player_id, name)
+            agent = VillagerAgent(player_id, name)
         else:
             raise ValueError(f"Unknown role: {role}")
-
+        agent.set_system_prompt_override(system_prompt)
+        return agent
