@@ -3,7 +3,7 @@ import asyncio
 import sys
 import os
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from backend.engine.game import WerewolfGame
 from backend.core.logger import GameLogger
@@ -45,4 +45,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-
