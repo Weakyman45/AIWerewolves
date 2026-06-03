@@ -1,5 +1,4 @@
 import asyncio
-import random
 from typing import Dict, List, Any, Optional, Callable
 from collections import defaultdict
 from backend.engine.game import WerewolfGame
@@ -31,39 +30,54 @@ class ABTesting:
             
             print(f"    游戏 {i+1}/{num_games} 开始...")
             
-            if i % 2 == 0:
-                winner = await self._run_single_game(version_a, version_b, player_names, True)
+            a_as_werewolves = i % 2 == 0
+            if a_as_werewolves:
+                game_result = await self._run_single_game(version_a, version_b, player_names)
+                werewolf_version = version_a
+                villager_version = version_b
             else:
-                winner = await self._run_single_game(version_b, version_a, player_names, False)
+                game_result = await self._run_single_game(version_b, version_a, player_names)
+                werewolf_version = version_b
+                villager_version = version_a
             
-            game_results.append({
+            game_result.update({
                 "game_number": i + 1,
-                "winner": winner,
-                "a_as_werewolves": i % 2 == 0,
+                "a_as_werewolves": a_as_werewolves,
+                "werewolf_version": werewolf_version,
+                "villager_version": villager_version,
             })
-            
+            game_results.append(game_result)
+
+            if not game_result["success"]:
+                print(f"    游戏 {i+1}/{num_games} 失败: {game_result['error']}")
+                continue
+
+            winner = game_result["winner"]
             if winner == "werewolves":
-                if i % 2 == 0:
+                if a_as_werewolves:
                     results_a_wins += 1
                 else:
                     results_b_wins += 1
             else:
-                if i % 2 == 0:
+                if a_as_werewolves:
                     results_b_wins += 1
                 else:
                     results_a_wins += 1
             
             print(f"    游戏 {i+1}/{num_games} 完成: {winner} 获胜")
         
-        total = len(game_results)
+        successful_games = len([result for result in game_results if result["success"]])
+        failed_games = len(game_results) - successful_games
         analysis = {
             "version_a": version_a,
             "version_b": version_b,
-            "total_games": total,
+            "total_games": len(game_results),
+            "successful_games": successful_games,
+            "failed_games": failed_games,
             "a_wins": results_a_wins,
             "b_wins": results_b_wins,
-            "a_win_rate": results_a_wins / total if total > 0 else 0,
-            "b_win_rate": results_b_wins / total if total > 0 else 0,
+            "a_win_rate": results_a_wins / successful_games if successful_games > 0 else 0,
+            "b_win_rate": results_b_wins / successful_games if successful_games > 0 else 0,
             "game_results": game_results,
             "better_version": self._determine_better_version(results_a_wins, results_b_wins, version_a, version_b),
         }
@@ -72,18 +86,28 @@ class ABTesting:
         return analysis
 
     async def _run_single_game(self, werewolf_version: str, other_version: str,
-                          player_names: List[str],
-                          a_as_werewolves: bool) -> str:
+                          player_names: List[str]) -> Dict[str, Any]:
         logger = GameLogger()
         strategy_prompts = self._build_strategy_prompts(werewolf_version, other_version)
         game = WerewolfGame(player_names, logger, strategy_prompts=strategy_prompts)
         
         try:
             winner = await game.run()
-            return winner
+            return {
+                "success": True,
+                "game_id": game.game_id,
+                "winner": winner.value if hasattr(winner, "value") else winner,
+                "error": None,
+            }
         except Exception as e:
             print(f"游戏运行出错: {e}")
-            return random.choice(["werewolves", "villagers"])
+            return {
+                "success": False,
+                "game_id": game.game_id,
+                "winner": None,
+                "error": str(e),
+                "error_type": type(e).__name__,
+            }
 
     def _build_strategy_prompts(self, werewolf_version: str, other_version: str) -> Dict[str, str]:
         prompts = {}
