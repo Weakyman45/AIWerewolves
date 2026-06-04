@@ -17,13 +17,14 @@ class EvolutionController:
                  win_rate_threshold: float = 0.05,
                  skip_ab: bool = False,
                  dry_run: bool = False,
+                 game_timeout: Optional[float] = None,
                  strategy_dir: Optional[str] = None,
                  log_dir: Optional[str] = None):
         self.parser = LogParser(log_dir)
         self.version_control = VersionControl(strategy_dir)
         self.analyzer = Analyzer()
         self.adapter = Adapter()
-        self.ab_testing = ABTesting(strategy_dir)
+        self.ab_testing = ABTesting(strategy_dir, game_timeout=game_timeout)
         
         self.current_version = initial_version or self.version_control.get_latest_version()
         self.num_games_per_iteration = num_games_per_iteration
@@ -31,6 +32,7 @@ class EvolutionController:
         self.win_rate_threshold = win_rate_threshold
         self.skip_ab = skip_ab
         self.dry_run = dry_run
+        self.game_timeout = game_timeout
         
         self.evolution_history = []
         self.is_running = False
@@ -161,7 +163,10 @@ class EvolutionController:
             
             try:
                 print(f"    游戏 {i+1}: 正在运行...")
-                winner = await game.run()
+                if self.game_timeout:
+                    winner = await asyncio.wait_for(game.run(), timeout=self.game_timeout)
+                else:
+                    winner = await game.run()
                 print(f"    游戏 {i+1}: 运行完成")
                 
                 game_data = {

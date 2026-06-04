@@ -7,9 +7,10 @@ from backend.evolution.version_control import VersionControl
 
 
 class ABTesting:
-    def __init__(self, strategy_dir: Optional[str] = None):
+    def __init__(self, strategy_dir: Optional[str] = None, game_timeout: Optional[float] = None):
         self.results = []
         self.version_control = VersionControl(strategy_dir)
+        self.game_timeout = game_timeout
 
     async def run_comparison(self, version_a: str, version_b: str, 
                          num_games: int = 10,
@@ -92,7 +93,10 @@ class ABTesting:
         game = WerewolfGame(player_names, logger, strategy_prompts=strategy_prompts)
         
         try:
-            winner = await game.run()
+            if self.game_timeout:
+                winner = await asyncio.wait_for(game.run(), timeout=self.game_timeout)
+            else:
+                winner = await game.run()
             return {
                 "success": True,
                 "game_id": game.game_id,

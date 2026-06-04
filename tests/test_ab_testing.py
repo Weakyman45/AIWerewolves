@@ -1,5 +1,6 @@
 import asyncio
 
+from backend.core.logger import GameLogger
 from backend.evolution.ab_testing import ABTesting
 
 
@@ -69,3 +70,31 @@ def test_run_comparison_records_side_assignments(monkeypatch):
     assert result["game_results"][1]["a_as_werewolves"] is False
     assert result["game_results"][1]["werewolf_version"] == "version-b"
     assert result["game_results"][1]["villager_version"] == "version-a"
+
+
+def test_run_single_game_reports_timeout(tmp_path, monkeypatch):
+    ab_testing = ABTesting.__new__(ABTesting)
+    ab_testing.game_timeout = 0.01
+    ab_testing.version_control = type(
+        "FakeVersionControl",
+        (),
+        {"get_prompt": lambda self, version, role: None},
+    )()
+
+    async def slow_run(self):
+        await asyncio.sleep(1)
+
+    monkeypatch.setattr("backend.evolution.ab_testing.GameLogger", lambda: GameLogger(log_dir=str(tmp_path)))
+    monkeypatch.setattr("backend.engine.game.WerewolfGame.run", slow_run)
+
+    result = asyncio.run(
+        ab_testing._run_single_game(
+            "v0.0.1",
+            "v0.0.2",
+            ["Alice", "Bob", "Charlie", "David", "Eve", "Frank"],
+        )
+    )
+
+    assert result["success"] is False
+    assert result["winner"] is None
+    assert result["error_type"] == "TimeoutError"
