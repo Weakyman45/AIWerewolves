@@ -31,11 +31,19 @@ class WerewolfGame:
         player_names: List[str],
         logger: Optional[GameLogger] = None,
         strategy_prompts: Optional[Dict[str, str]] = None,
+        skip_sheriff: bool = False,
+        max_rounds: Optional[int] = None,
+        sleep_scale: float = 1.0,
+        skip_last_words: bool = False,
     ):
         self.game_id = str(uuid.uuid4())
         self.logger = logger or GameLogger()
         self.player_names = player_names
         self.strategy_prompts = strategy_prompts or {}
+        self.skip_sheriff = skip_sheriff
+        self.max_rounds = max_rounds
+        self.sleep_scale = sleep_scale
+        self.skip_last_words = skip_last_words
         self.players: Dict[str, BaseAgent] = {}
         self.player_states: Dict[str, PlayerState] = {}
         self.state = GameState(game_id=self.game_id)
@@ -166,6 +174,8 @@ class WerewolfGame:
             while self.state.winner is None:
                 await self._wait_if_paused()
                 await self._run_round()
+                if self.max_rounds and self.state.winner is None and self.state.current_round > self.max_rounds:
+                    self.state.winner = self._decide_forced_winner()
             
             self.state.ended_at = datetime.now()
             self.logger.log_game_end(self.state)
@@ -198,7 +208,12 @@ class WerewolfGame:
         if self.state.winner is not None:
             return
         
-        if self.state.current_round == 1 and not self.state.sheriff_id and not self.state.sheriff_lost:
+        if (
+            not self.skip_sheriff
+            and self.state.current_round == 1
+            and not self.state.sheriff_id
+            and not self.state.sheriff_lost
+        ):
             await self._run_sheriff_election(round_record)
         
         if self.state.winner is not None:
@@ -218,7 +233,7 @@ class WerewolfGame:
         
         self.state.current_phase = GamePhase.SHERIFF_ELECTION
         self.logger.log_phase_change(self.game_id, self.state.current_round, "警长竞选")
-        await asyncio.sleep(1)
+        await self._sleep(1)
         
         sheriff_candidates = []
         stay_in_election = []
@@ -652,16 +667,16 @@ class WerewolfGame:
         
         self.state.current_phase = GamePhase.NIGHT
         self.logger.log_phase_change(self.game_id, self.state.current_round, "夜晚")
-        await asyncio.sleep(1)
+        await self._sleep(1)
         
         kill_victim = await self._process_wolf_kill(round_record)
-        await asyncio.sleep(1)
+        await self._sleep(1)
         
         await self._process_seer_check(round_record)
-        await asyncio.sleep(1)
+        await self._sleep(1)
         
         await self._process_witch_action(round_record, kill_victim)
-        await asyncio.sleep(1)
+        await self._sleep(1)
         
         if kill_victim and not self._was_saved(kill_victim, round_record):
             self.death_queue.append((kill_victim, "wolf_kill"))
@@ -900,13 +915,13 @@ class WerewolfGame:
         
         self.state.current_phase = GamePhase.DAY
         self.logger.log_phase_change(self.game_id, self.state.current_round, "白天")
-        await asyncio.sleep(1)
+        await self._sleep(1)
         
         speak_order = await self._determine_speak_order()
         self.state.speak_order = speak_order
         
         await self._run_speeches(round_record, speak_order)
-        await asyncio.sleep(1)
+        await self._sleep(1)
         
         if self.state.winner is not None:
             return
@@ -914,7 +929,8 @@ class WerewolfGame:
         voted_out = await self._run_full_voting_cycle(round_record)
         
         if voted_out:
-            await self._run_last_words(voted_out, round_record)
+            if not self.skip_last_words:
+                await self._run_last_words(voted_out, round_record)
             self.death_queue.append((voted_out, "voted_out"))
     
     async def _determine_speak_order(self) -> List[str]:
@@ -1017,7 +1033,7 @@ class WerewolfGame:
             for a in self.players.values():
                 a.add_conversation("user", f"{self.player_states[player_id].name}: {msg.content}")
             
-            await asyncio.sleep(0.5)
+            await self._sleep(0.5)
     
     async def _run_full_voting_cycle(self, round_record: RoundRecord) -> Optional[str]:
         pk_rounds = 0
@@ -1033,7 +1049,7 @@ class WerewolfGame:
                 self.state.current_phase = GamePhase.VOTING
                 self.logger.log_phase_change(self.game_id, self.state.current_round, f"平票PK投票 (第{pk_rounds}轮)")
             
-            await asyncio.sleep(1)
+            await self._sleep(1)
             
             result = await self._run_voting_round(round_record, pk_rounds > 0)
             
@@ -1186,7 +1202,7 @@ class WerewolfGame:
             for a in self.players.values():
                 a.add_conversation("user", f"{self.player_states[player_id].name} (PK发言): {msg.content}")
             
-            await asyncio.sleep(0.5)
+            await self._sleep(0.5)
     
     async def _run_last_words(self, dead_player_id: str, round_record: RoundRecord):
         await self._wait_if_paused()
@@ -1242,3 +1258,26 @@ class WerewolfGame:
             return Team.WEREWOLVES
         
         return None
+
+    async def _sleep(self, seconds: float):
+        if self.sleep_scale <= 0:
+            return
+        await asyncio.sleep(seconds * self.sleep_scale)
+
+    def _decide_forced_winner(self) -> Team:
+        natural_winner = self._check_winner()
+        if natural_winner:
+            return natural_winner
+
+        alive_wolves = [
+            pid for pid, player in self.player_states.items()
+            if player.is_alive and player.role == Role.WEREWOLF
+        ]
+        alive_villagers = [
+            pid for pid, player in self.player_states.items()
+            if player.is_alive and player.role != Role.WEREWOLF
+        ]
+
+        if len(alive_wolves) >= len(alive_villagers) / 2:
+            return Team.WEREWOLVES
+        return Team.VILLAGERS

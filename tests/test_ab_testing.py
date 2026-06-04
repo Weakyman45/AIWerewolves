@@ -1,6 +1,7 @@
 import asyncio
 
 from backend.core.logger import GameLogger
+from backend.core.models import Team
 from backend.evolution.ab_testing import ABTesting
 
 
@@ -121,6 +122,49 @@ def test_run_single_game_uses_mock_runner(tmp_path):
     assert result["success"] is True
     assert result["winner"] in {"werewolves", "villagers"}
     assert result["runner"] == "mock"
+
+
+def test_run_single_game_uses_live_fast_options(tmp_path, monkeypatch):
+    captured = {}
+
+    class FakeWerewolfGame:
+        def __init__(self, player_names, logger, **kwargs):
+            captured["player_names"] = player_names
+            captured["logger"] = logger
+            captured["kwargs"] = kwargs
+            self.game_id = "fake-game"
+
+        async def run(self):
+            return Team.VILLAGERS
+
+    ab_testing = ABTesting(
+        strategy_dir=str(tmp_path / "strategies"),
+        game_runner="live-fast",
+        log_dir=str(tmp_path / "logs"),
+    )
+    ab_testing.version_control = type(
+        "FakeVersionControl",
+        (),
+        {"get_prompt": lambda self, version, role: f"{version}:{role}"},
+    )()
+    monkeypatch.setattr("backend.engine.game.WerewolfGame", FakeWerewolfGame)
+
+    result = asyncio.run(
+        ab_testing._run_single_game(
+            "v0.0.1",
+            "v0.0.2",
+            ["Alice", "Bob", "Charlie", "David", "Eve", "Frank"],
+        )
+    )
+
+    assert result["success"] is True
+    assert result["winner"] == "villagers"
+    assert result["runner"] == "live-fast"
+    assert captured["kwargs"]["skip_sheriff"] is True
+    assert captured["kwargs"]["max_rounds"] == 1
+    assert captured["kwargs"]["sleep_scale"] == 0.0
+    assert captured["kwargs"]["skip_last_words"] is True
+    assert captured["kwargs"]["strategy_prompts"]["werewolf"] == "v0.0.1:werewolf"
 
 
 def test_statistical_significance_uses_exact_binomial_p_value():

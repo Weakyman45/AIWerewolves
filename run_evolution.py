@@ -18,7 +18,7 @@ def parse_args():
     parser.add_argument("--skip-ab", action="store_true", help="Create a candidate version without running A/B validation.")
     parser.add_argument("--dry-run", action="store_true", help="Skip live training games and A/B; only analyze logs and create a candidate version.")
     parser.add_argument("--fallback-only", action="store_true", help="Skip LLM prompt optimization and apply deterministic metric-based patches.")
-    parser.add_argument("--game-runner", choices=["live", "mock"], default="live", help="Game runner implementation for training and A/B games.")
+    parser.add_argument("--game-runner", choices=["live", "live-fast", "mock"], default="live", help="Game runner implementation for training and A/B games.")
     parser.add_argument("--game-timeout", type=float, default=300, help="Timeout in seconds for each live game.")
     parser.add_argument("--initial-version", default=None, help="Strategy version to start from.")
     return parser.parse_args()

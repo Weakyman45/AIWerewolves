@@ -15,7 +15,7 @@ def parse_args():
     parser.add_argument("--games", type=int, default=20, help="Number of A/B games to run.")
     parser.add_argument("--min-successful-games", type=int, default=None, help="Minimum successful games required for a conclusive result.")
     parser.add_argument("--improvement-threshold", type=float, default=0.0, help="Minimum candidate win-rate improvement required.")
-    parser.add_argument("--game-runner", choices=["live", "mock"], default="live", help="Game runner to use for A/B games.")
+    parser.add_argument("--game-runner", choices=["live", "live-fast", "mock"], default="live", help="Game runner to use for A/B games.")
     parser.add_argument("--game-timeout", type=float, default=300, help="Timeout in seconds for each game.")
     parser.add_argument("--strategy-dir", default=None, help="Strategy directory.")
     parser.add_argument("--log-dir", default=None, help="Log directory.")

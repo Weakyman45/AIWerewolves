@@ -159,6 +159,7 @@ LLM_TIMEOUT=60 LLM_MAX_RETRIES=0 LLM_MAX_TOKENS=160 python run_evolution.py \
   --iterations 1 \
   --train-games 1 \
   --ab-games 1 \
+  --game-runner live-fast \
   --game-timeout 240
 ```
 
@@ -185,6 +186,7 @@ python evaluate_evolution.py \
   --candidate v0.0.8 \
   --games 20 \
   --min-successful-games 16 \
+  --game-runner live-fast \
   --game-timeout 240
 ```
 
@@ -215,7 +217,7 @@ python evaluate_evolution.py \
 | `--skip-ab` | `False` | 生成候选后跳过A/B，候选不会被接受 |
 | `--dry-run` | `False` | 不运行训练局和A/B，只基于已有日志生成候选 |
 | `--fallback-only` | `False` | 跳过LLM Prompt优化，直接应用确定性数据补丁 |
-| `--game-runner` | `live` | `live` 使用真实Agent，`mock` 使用确定性离线对局 |
+| `--game-runner` | `live` | `live` 使用完整真实Agent，`live-fast` 使用压缩真实评估局，`mock` 使用确定性离线对局 |
 | `--game-timeout` | `300` | 单局真实/模拟对局超时时间，单位秒 |
 | `--initial-version` | latest | 指定起始策略版本 |
 
@@ -228,7 +230,7 @@ python evaluate_evolution.py \
 | `--games` | `20` | A/B评估对局数 |
 | `--min-successful-games` | `games` | 得出结论所需的最少成功局数 |
 | `--improvement-threshold` | `0.0` | 候选需要超过基线的最低胜率提升 |
-| `--game-runner` | `live` | `live` 使用真实Agent，`mock` 使用确定性离线对局 |
+| `--game-runner` | `live` | `live` 使用完整真实Agent，`live-fast` 使用压缩真实评估局，`mock` 使用确定性离线对局 |
 | `--game-timeout` | `300` | 单局超时时间，单位秒 |
 | `--strategy-dir` | `.env`配置 | 策略目录 |
 | `--log-dir` | `.env`配置 | 日志目录 |

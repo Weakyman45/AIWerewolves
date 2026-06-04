@@ -159,7 +159,7 @@ class EvolutionController:
         }
 
     async def _generate_training_games(self) -> List[Dict[str, Any]]:
-        if self.game_runner == "live":
+        if self.game_runner in {"live", "live-fast"}:
             from backend.engine.game import WerewolfGame
         else:
             from backend.evolution.mock_game import MockGameRunner
@@ -172,8 +172,16 @@ class EvolutionController:
         for i in range(self.num_games_per_iteration):
             print(f"    游戏 {i+1}/{self.num_games_per_iteration} 开始...")
             logger = GameLogger(log_dir=self.parser.log_dir)
-            if self.game_runner == "live":
-                game = WerewolfGame(player_names, logger)
+            if self.game_runner in {"live", "live-fast"}:
+                game_kwargs = {}
+                if self.game_runner == "live-fast":
+                    game_kwargs.update({
+                        "skip_sheriff": True,
+                        "max_rounds": 1,
+                        "sleep_scale": 0.0,
+                        "skip_last_words": True,
+                    })
+                game = WerewolfGame(player_names, logger, **game_kwargs)
             else:
                 game = MockGameRunner(
                     player_names,

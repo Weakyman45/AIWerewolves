@@ -124,6 +124,7 @@ LLM_TIMEOUT=60 LLM_MAX_RETRIES=0 LLM_MAX_TOKENS=160 python evaluate_evolution.py
   --candidate v0.0.8 \
   --games 2 \
   --min-successful-games 2 \
+  --game-runner live-fast \
   --game-timeout 240
 ```
 
