@@ -25,7 +25,7 @@ class EvolutionController:
         self.analyzer = Analyzer()
         self.adapter = Adapter(fallback_only=fallback_only)
         self.ab_testing = ABTesting(strategy_dir, game_timeout=game_timeout)
-        
+
         self.current_version = initial_version or self.version_control.get_latest_version()
         self.num_games_per_iteration = num_games_per_iteration
         self.ab_games = ab_games
@@ -175,6 +175,9 @@ class EvolutionController:
                 game_data = {
                     "game_id": game.game_id,
                     "winner": winner,
+                    "status": "completed",
+                    "error": None,
+                    "error_type": None,
                     "timestamp": datetime.now().isoformat(),
                 }
                 
@@ -187,12 +190,22 @@ class EvolutionController:
                 
                 print(f"    游戏 {i+1}/{self.num_games_per_iteration}: {winner} 获胜")
                 
+            except asyncio.TimeoutError as e:
+                game_data = self._build_failed_game_result(game, e, "timed_out")
+                results.append(game_data)
+                print(f"    游戏 {i+1}/{self.num_games_per_iteration}: 超时（{self.game_timeout}秒）")
             except Exception as e:
-                print(f"    游戏 {i+1} 出错: {e}")
-                import traceback
-                traceback.print_exc()
-        
-        print(f"    训练对局生成完成，共 {len(results)} 局")
+                game_data = self._build_failed_game_result(game, e, "failed")
+                results.append(game_data)
+                print(f"    游戏 {i+1}/{self.num_games_per_iteration}: 失败（{type(e).__name__}: {e}）")
+
+        summary = self._summarize_training_results(results)
+        print(
+            "    训练对局生成完成："
+            f"完成 {summary['completed']} 局，"
+            f"超时 {summary['timed_out']} 局，"
+            f"失败 {summary['failed']} 局"
+        )
         return results
 
     def _analyze_game_results(self, game_results: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -201,7 +214,12 @@ class EvolutionController:
             if game.get("winner") in {"werewolves", "villagers"}
         ]
         
-        for game_result in game_results:
+        completed_results = [
+            result for result in game_results
+            if result.get("status") in {None, "completed"}
+        ]
+
+        for game_result in completed_results:
             game_id = game_result.get("game_id")
             parsed_game = self.parser.parse_game(game_id)
             if (
@@ -218,7 +236,8 @@ class EvolutionController:
         return {
             "aggregate": aggregate_analysis,
             "suggestions": suggestions,
-            "game_count": len(game_results),
+            "game_count": len(completed_results),
+            "training_summary": self._summarize_training_results(game_results),
         }
 
     async def _optimize_strategy(self, analysis: Dict[str, Any]) -> str:
@@ -259,6 +278,7 @@ class EvolutionController:
                 "role_analysis": aggregate.get("role_analysis", {}),
                 "common_mistakes": aggregate.get("common_mistakes", {}),
             },
+            "training_summary": analysis.get("training_summary", {}),
             "role_optimizations": role_optimizations,
         }
         
@@ -314,6 +334,48 @@ class EvolutionController:
         if metadata:
             return metadata.get("parent")
         return None
+
+    def _build_failed_game_result(
+        self,
+        game: Any,
+        error: Exception,
+        status: str,
+    ) -> Dict[str, Any]:
+        return {
+            "game_id": game.game_id,
+            "winner": None,
+            "status": status,
+            "error": str(error),
+            "error_type": type(error).__name__,
+            "timestamp": datetime.now().isoformat(),
+        }
+
+    def _summarize_training_results(self, game_results: List[Dict[str, Any]]) -> Dict[str, Any]:
+        summary = {
+            "requested": getattr(self, "num_games_per_iteration", len(game_results)),
+            "total_attempted": len(game_results),
+            "completed": 0,
+            "timed_out": 0,
+            "failed": 0,
+            "failed_by_type": {},
+        }
+
+        for result in game_results:
+            status = result.get("status") or "completed"
+            if status == "completed":
+                summary["completed"] += 1
+            elif status == "timed_out":
+                summary["timed_out"] += 1
+            else:
+                summary["failed"] += 1
+
+            if status != "completed":
+                error_type = result.get("error_type") or "UnknownError"
+                summary["failed_by_type"][error_type] = (
+                    summary["failed_by_type"].get(error_type, 0) + 1
+                )
+
+        return summary
 
     def _get_initial_prompts(self) -> Dict[str, str]:
         return {

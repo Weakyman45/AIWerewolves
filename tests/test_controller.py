@@ -53,6 +53,14 @@ def test_optimize_strategy_stores_role_metadata(tmp_path):
                         "suggestion": "global suggestion",
                     }
                 ],
+                "training_summary": {
+                    "requested": 3,
+                    "total_attempted": 3,
+                    "completed": 1,
+                    "timed_out": 1,
+                    "failed": 1,
+                    "failed_by_type": {"TimeoutError": 1, "RuntimeError": 1},
+                },
             }
         )
     )
@@ -61,6 +69,9 @@ def test_optimize_strategy_stores_role_metadata(tmp_path):
 
     assert new_version == "v0.0.2"
     assert metadata["analysis_summary"]["total_games"] == 5
+    assert metadata["training_summary"]["completed"] == 1
+    assert metadata["training_summary"]["timed_out"] == 1
+    assert metadata["training_summary"]["failed_by_type"]["RuntimeError"] == 1
     assert metadata["analysis_summary"]["role_analysis"]["werewolf_hiding_ability"]["average_score"] == 0.1
     assert metadata["role_optimizations"]["werewolf"] == {
         "reasoning": "werewolf reasoning",
@@ -176,6 +187,7 @@ def test_controller_uses_next_available_candidate_version(tmp_path):
                     "common_mistakes": {},
                 },
                 "suggestions": [],
+                "training_summary": {},
             }
         )
     )
@@ -184,8 +196,9 @@ def test_controller_uses_next_available_candidate_version(tmp_path):
     assert version_control.version_exists("v0.0.3")
 
 
-def test_controller_analyzes_only_completed_games():
+def test_controller_analyzes_only_completed_games_and_summarizes_failures():
     controller = EvolutionController.__new__(EvolutionController)
+    controller.num_games_per_iteration = 3
     controller.parser = type(
         "FakeParser",
         (),
@@ -194,12 +207,42 @@ def test_controller_analyzes_only_completed_games():
                 {"game_id": "complete", "winner": "werewolves", "metrics": {}, "raw_events": []},
                 {"game_id": "incomplete", "winner": None, "metrics": {}, "raw_events": []},
             ],
-            "parse_game": lambda self, game_id: None,
+            "parse_game": lambda self, game_id: {
+                "game_id": "new_complete",
+                "winner": "villagers",
+                "metrics": {},
+                "raw_events": [],
+            } if game_id == "new_complete" else None,
         },
     )()
     controller.analyzer = EvolutionController().analyzer
 
-    analysis = controller._analyze_game_results([])
+    analysis = controller._analyze_game_results(
+        [
+            {"game_id": "new_complete", "winner": "villagers", "status": "completed"},
+            {
+                "game_id": "timed_out",
+                "winner": None,
+                "status": "timed_out",
+                "error_type": "TimeoutError",
+            },
+            {
+                "game_id": "failed",
+                "winner": None,
+                "status": "failed",
+                "error_type": "RuntimeError",
+            },
+        ]
+    )
 
-    assert analysis["aggregate"]["total_games"] == 1
-    assert analysis["aggregate"]["werewolf_win_rate"] == 1.0
+    assert analysis["aggregate"]["total_games"] == 2
+    assert analysis["aggregate"]["werewolf_win_rate"] == 0.5
+    assert analysis["game_count"] == 1
+    assert analysis["training_summary"] == {
+        "requested": 3,
+        "total_attempted": 3,
+        "completed": 1,
+        "timed_out": 1,
+        "failed": 1,
+        "failed_by_type": {"TimeoutError": 1, "RuntimeError": 1},
+    }
