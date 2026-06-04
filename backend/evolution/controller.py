@@ -6,7 +6,6 @@ from backend.evolution.version_control import VersionControl
 from backend.evolution.analyzer import Analyzer
 from backend.evolution.adapter import Adapter
 from backend.evolution.ab_testing import ABTesting
-from backend.engine.game import WerewolfGame
 from backend.core.logger import GameLogger
 
 
@@ -17,13 +16,14 @@ class EvolutionController:
                  win_rate_threshold: float = 0.05,
                  skip_ab: bool = False,
                  dry_run: bool = False,
+                 fallback_only: bool = False,
                  game_timeout: Optional[float] = None,
                  strategy_dir: Optional[str] = None,
                  log_dir: Optional[str] = None):
         self.parser = LogParser(log_dir)
         self.version_control = VersionControl(strategy_dir)
         self.analyzer = Analyzer()
-        self.adapter = Adapter()
+        self.adapter = Adapter(fallback_only=fallback_only)
         self.ab_testing = ABTesting(strategy_dir, game_timeout=game_timeout)
         
         self.current_version = initial_version or self.version_control.get_latest_version()
@@ -32,6 +32,7 @@ class EvolutionController:
         self.win_rate_threshold = win_rate_threshold
         self.skip_ab = skip_ab
         self.dry_run = dry_run
+        self.fallback_only = fallback_only
         self.game_timeout = game_timeout
         
         self.evolution_history = []
@@ -151,6 +152,8 @@ class EvolutionController:
         }
 
     async def _generate_training_games(self) -> List[Dict[str, Any]]:
+        from backend.engine.game import WerewolfGame
+
         player_names = ["Alice", "Bob", "Charlie", "David", "Eve", "Frank"]
         results = []
         

@@ -1,7 +1,6 @@
 import asyncio
 from typing import Dict, List, Any, Optional, Callable
 from collections import defaultdict
-from backend.engine.game import WerewolfGame
 from backend.core.logger import GameLogger
 from backend.evolution.version_control import VersionControl
 
@@ -88,6 +87,8 @@ class ABTesting:
 
     async def _run_single_game(self, werewolf_version: str, other_version: str,
                           player_names: List[str]) -> Dict[str, Any]:
+        from backend.engine.game import WerewolfGame
+
         logger = GameLogger()
         strategy_prompts = self._build_strategy_prompts(werewolf_version, other_version)
         game = WerewolfGame(player_names, logger, strategy_prompts=strategy_prompts)
@@ -136,6 +137,8 @@ class ABTesting:
 
     def run_rollout_test(self, version: str, num_games: int = 20,
                     player_names: Optional[List[str]] = None) -> Dict[str, Any]:
+        from backend.engine.game import WerewolfGame
+
         if player_names is None:
             player_names = ["Alice", "Bob", "Charlie", "David", "Eve", "Frank"]
         

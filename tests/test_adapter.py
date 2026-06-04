@@ -58,6 +58,25 @@ def test_adapter_appends_deterministic_patch_once():
     assert "建议三" in patched_again
 
 
+def test_adapter_fallback_only_skips_llm_client_creation():
+    adapter = Adapter(fallback_only=True)
+
+    result = adapter.optimize_prompt(
+        "基础角色提示",
+        "werewolf",
+        {
+            "werewolf_win_rate": 0.25,
+            "role_analysis": {},
+            "common_mistakes": {"counts": {}},
+        },
+    )
+
+    assert adapter.llm is None
+    assert adapter.code_llm is None
+    assert "## 数据驱动策略补丁" in result["optimized"]
+    assert result["reasoning"] == "已启用确定性策略补丁模式，跳过LLM优化。"
+
+
 def test_evolution_summary_includes_role_metrics():
     adapter = Adapter.__new__(Adapter)
     summary = adapter.create_evolution_summary(

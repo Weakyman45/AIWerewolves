@@ -17,6 +17,7 @@ def parse_args():
     parser.add_argument("--win-rate-threshold", type=float, default=0.05, help="Minimum win-rate improvement needed for acceptance.")
     parser.add_argument("--skip-ab", action="store_true", help="Create a candidate version without running A/B validation.")
     parser.add_argument("--dry-run", action="store_true", help="Skip live training games and A/B; only analyze logs and create a candidate version.")
+    parser.add_argument("--fallback-only", action="store_true", help="Skip LLM prompt optimization and apply deterministic metric-based patches.")
     parser.add_argument("--game-timeout", type=float, default=300, help="Timeout in seconds for each live game.")
     parser.add_argument("--initial-version", default=None, help="Strategy version to start from.")
     return parser.parse_args()
@@ -36,6 +37,7 @@ async def main():
         win_rate_threshold=args.win_rate_threshold,
         skip_ab=args.skip_ab,
         dry_run=args.dry_run,
+        fallback_only=args.fallback_only,
         game_timeout=args.game_timeout,
     )
     
@@ -57,6 +59,7 @@ async def main():
     print(f"A/B局数/迭代: {args.ab_games}")
     print(f"跳过A/B: {args.skip_ab}")
     print(f"dry-run: {args.dry_run}")
+    print(f"fallback-only: {args.fallback_only}")
     print(f"单局超时: {args.game_timeout}秒")
     print("=" * 80)
     

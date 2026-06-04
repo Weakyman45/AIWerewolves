@@ -3,7 +3,6 @@ from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
 from pydantic import BaseModel, Field
-from backend.core.config import settings
 
 
 class OptimizedPrompt(BaseModel):
@@ -15,7 +14,16 @@ class OptimizedPrompt(BaseModel):
 class Adapter:
     PATCH_MARKER = "## 数据驱动策略补丁"
 
-    def __init__(self):
+    def __init__(self, fallback_only: bool = False):
+        self.fallback_only = fallback_only
+        self.llm = None
+        self.code_llm = None
+
+        if fallback_only:
+            return
+
+        from backend.core.config import settings
+
         self.llm = ChatOpenAI(
             api_key=settings.DOUBAO_API_KEY,
             base_url=settings.DOUBAO_BASE_URL,
@@ -141,6 +149,14 @@ class Adapter:
 
     def _apply_suggestions(self, original_prompt: str, role: str, 
                       suggestions: List[str]) -> Dict[str, Any]:
+        if self.fallback_only:
+            fallback_prompt = self._append_suggestions_patch(original_prompt, suggestions)
+            return {
+                "optimized_prompt": fallback_prompt,
+                "reasoning": "已启用确定性策略补丁模式，跳过LLM优化。",
+                "key_changes": suggestions,
+            }
+
         parser = JsonOutputParser(pydantic_object=OptimizedPrompt)
         
         suggestion_text = "\n".join(f"- {s}" for s in suggestions)

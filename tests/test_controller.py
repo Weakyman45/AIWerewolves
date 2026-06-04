@@ -102,6 +102,20 @@ def test_controller_dry_run_skips_training_and_ab(tmp_path):
     assert controller.version_control.get_latest_pointer() == "v0.0.1"
 
 
+def test_controller_passes_fallback_only_to_adapter(tmp_path):
+    controller = EvolutionController(
+        initial_version="v0.0.1",
+        strategy_dir=str(tmp_path),
+        log_dir=str(tmp_path / "logs"),
+        dry_run=True,
+        fallback_only=True,
+    )
+
+    assert controller.fallback_only is True
+    assert controller.adapter.fallback_only is True
+    assert controller.adapter.llm is None
+
+
 def test_controller_skip_ab_creates_unaccepted_candidate(tmp_path):
     version_control = VersionControl(strategy_dir=str(tmp_path))
     version_control.create_version(
