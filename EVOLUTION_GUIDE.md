@@ -99,9 +99,83 @@ asyncio.run(main())
 # 测试基础功能
 python test_evolution.py
 
-# 运行完整进化循环
-python run_evolution.py
+# 运行完整进化循环（默认使用真实LLM对局）
+python run_evolution.py --iterations 1 --train-games 1 --ab-games 1
 ```
+
+## 推荐运行模式
+
+### 1. 离线闭环模式
+
+用于开发、回归测试和CI验证。该模式不创建真实Agent，不调用LLM API，而是用确定性的 mock 对局日志跑完整流程。
+
+```bash
+python run_evolution.py \
+  --iterations 1 \
+  --train-games 1 \
+  --ab-games 4 \
+  --fallback-only \
+  --game-runner mock
+```
+
+适用场景：
+
+- 验证"训练对局 -> 日志解析 -> 指标分析 -> 生成候选 -> A/B -> 接受/拒绝"闭环
+- 快速排查版本管理和元数据写入问题
+- 在没有API Key或网络不稳定时继续开发
+
+### 2. dry-run 候选生成
+
+用于只读取已有日志、生成候选Prompt，不运行训练局和A/B。
+
+```bash
+python run_evolution.py \
+  --iterations 1 \
+  --train-games 0 \
+  --dry-run \
+  --fallback-only \
+  --initial-version v0.0.8
+```
+
+注意：dry-run 生成的候选版本不会被接受，`latest.json` 会回滚到原版本。
+
+### 3. 真实 LLM 模式
+
+用于真实Agent对局和真实Prompt优化。该模式依赖 `.env` 中的模型配置，耗时和API成本都更高。
+
+```bash
+python run_evolution.py \
+  --iterations 1 \
+  --train-games 1 \
+  --ab-games 1 \
+  --game-timeout 60 \
+  --initial-version v0.0.8
+```
+
+如果模型调用不稳定，可以降低等待时间并关闭重试：
+
+```bash
+LLM_TIMEOUT=15 LLM_MAX_RETRIES=0 python run_evolution.py \
+  --iterations 1 \
+  --train-games 1 \
+  --ab-games 1 \
+  --game-timeout 45
+```
+
+## CLI 参数
+
+| 参数 | 默认值 | 说明 |
+| ---- | ------ | ---- |
+| `--iterations` | `1` | 进化迭代次数 |
+| `--train-games` | `1` | 每轮训练对局数 |
+| `--ab-games` | `1` | 每轮A/B测试对局数 |
+| `--win-rate-threshold` | `0.05` | 接受候选版本需要达到的胜率提升阈值 |
+| `--skip-ab` | `False` | 生成候选后跳过A/B，候选不会被接受 |
+| `--dry-run` | `False` | 不运行训练局和A/B，只基于已有日志生成候选 |
+| `--fallback-only` | `False` | 跳过LLM Prompt优化，直接应用确定性数据补丁 |
+| `--game-runner` | `live` | `live` 使用真实Agent，`mock` 使用确定性离线对局 |
+| `--game-timeout` | `300` | 单局真实/模拟对局超时时间，单位秒 |
+| `--initial-version` | latest | 指定起始策略版本 |
 
 ## 目录结构
 
@@ -122,6 +196,16 @@ strategies/
 logs/                    # 对局日志目录
 ```
 
+## 版本元数据
+
+每个 `strategies/v*/metadata.json` 会记录：
+
+- `analysis_summary`：基于完成对局计算的胜率、角色指标和常见失误
+- `training_summary`：本轮训练请求数、完成数、超时数、失败数和失败类型
+- `role_optimizations`：各角色的优化理由和关键变更
+
+训练失败或超时不会进入胜率分析，但会进入 `training_summary`，用于区分策略表现和运行环境问题。
+
 ## 自定义配置
 
 ### 调整进化参数
@@ -129,7 +213,9 @@ logs/                    # 对局日志目录
 ```python
 controller = EvolutionController(
     num_games_per_iteration=50,   # 更多对局 = 更稳定的统计
-    win_rate_threshold=0.03       # 更低的阈值 = 更容易接受新版本
+    win_rate_threshold=0.03,      # 更低的阈值 = 更容易接受新版本
+    game_runner="mock",           # mock=离线确定性对局，live=真实LLM对局
+    fallback_only=True            # 跳过LLM优化，使用确定性策略补丁
 )
 ```
 
@@ -192,13 +278,15 @@ print(f"优化后Prompt: {optimized['optimized']}")
 
 ## 注意事项
 
-1. **时间消耗** - 完整的进化过程可能需要较长时间
-2. **API成本** - 大量对局会消耗较多的API调用
-3. **统计显著性** - 确保有足够的对局数来得出可靠结论
-4. **回滚能力** - 保留旧版本以便回滚
+1. **时间消耗** - 真实LLM对局可能需要较长时间，开发时优先用 `--game-runner mock`
+2. **API成本** - 大量真实对局会消耗较多API调用
+3. **统计显著性** - 确保有足够的A/B对局数来得出可靠结论
+4. **回滚能力** - 未接受的候选版本会保留文件，但 `latest.json` 会回滚到原版本
+5. **失败统计** - 失败和超时训练局不会进入胜率分析，只进入 `training_summary`
 
 ## 下一步
 
-- 运行完整的进化循环 (`python run_evolution.py`)
-- 查看策略版本的对战数据
-- 分析进化效果，调整参数
+- 先运行离线闭环：`python run_evolution.py --iterations 1 --train-games 1 --ab-games 4 --fallback-only --game-runner mock`
+- 再运行小规模真实对局验证API稳定性
+- 查看 `strategies/v*/metadata.json`，确认 `analysis_summary` 和 `training_summary`
+- 扩大真实A/B对局数，评估策略效果

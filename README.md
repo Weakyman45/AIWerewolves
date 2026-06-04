@@ -27,6 +27,20 @@ Werewolve/
 
 ## 快速开始
 
+### 环境配置
+
+```bash
+cp .env.example .env
+```
+
+`.env` 需要配置方舟/豆包模型：
+
+- `DOUBAO_API_KEY`
+- `DOUBAO_MODEL`
+- `DOUBAO_CODE_MODEL`
+- `LLM_TIMEOUT`
+- `LLM_MAX_RETRIES`
+
 ### 后端启动
 ```bash
 # 创建虚拟环境
@@ -35,10 +49,6 @@ source venv/bin/activate  # macOS/Linux
 
 # 安装依赖
 pip install -r requirements.txt
-
-# 复制配置文件
-cp .env.example .env
-# 编辑 .env，填入API Key
 
 # 启动服务
 uvicorn backend.main:app --reload --port 8000
@@ -58,14 +68,60 @@ npm run dev
 - 策略版本管理与回滚
 - A/B对战验证系统
 - 胜率提升追踪
+- 离线 mock 演化模式，不依赖真实 LLM/API
+- 失败/超时训练局结构化统计
 
-## 开发进度
+### 常用演化命令
+
+离线闭环验证，不调用真实 LLM：
+
+```bash
+python run_evolution.py \
+  --iterations 1 \
+  --train-games 1 \
+  --ab-games 4 \
+  --fallback-only \
+  --game-runner mock
+```
+
+只基于已有日志生成候选版本：
+
+```bash
+python run_evolution.py \
+  --iterations 1 \
+  --train-games 0 \
+  --dry-run \
+  --fallback-only
+```
+
+真实 LLM 对局运行：
+
+```bash
+python run_evolution.py \
+  --iterations 1 \
+  --train-games 1 \
+  --ab-games 1 \
+  --game-timeout 60
+```
+
+### 验证命令
+
+```bash
+python -m pytest
+python -m compileall -q backend
+cd frontend && npm run lint && npm run build
+```
+
+## 当前状态
 
 - ✅ 项目骨架搭建
-- ⏳ 基础数据模型
-- ⏳ 信息隔离机制
-- ⏳ 5种角色Agent
-- ⏳ 对局引擎
-- ⏳ 前端UI
-- ⏳ 自进化系统
-
+- ✅ 基础数据模型
+- ✅ 信息隔离机制
+- ✅ 5种角色Agent
+- ✅ 对局引擎
+- ✅ 前端UI基础界面
+- ✅ 自进化系统
+- ✅ 策略版本管理与回滚
+- ✅ 数据驱动Prompt补丁
+- ✅ mock 离线演化闭环测试
+- ⏳ 真实 LLM 长跑稳定性与效果验证
