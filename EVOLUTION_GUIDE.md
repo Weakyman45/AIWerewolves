@@ -152,14 +152,14 @@ python run_evolution.py \
   --initial-version v0.0.8
 ```
 
-如果模型调用不稳定，可以降低等待时间并关闭重试：
+如果模型连接正常但响应较慢，可以提高单次请求和单局超时，同时降低输出长度：
 
 ```bash
-LLM_TIMEOUT=15 LLM_MAX_RETRIES=0 python run_evolution.py \
+LLM_TIMEOUT=60 LLM_MAX_RETRIES=0 LLM_MAX_TOKENS=160 python run_evolution.py \
   --iterations 1 \
   --train-games 1 \
   --ab-games 1 \
-  --game-timeout 45
+  --game-timeout 240
 ```
 
 ## 进化效果评估
@@ -185,7 +185,7 @@ python evaluate_evolution.py \
   --candidate v0.0.8 \
   --games 20 \
   --min-successful-games 16 \
-  --game-timeout 60
+  --game-timeout 240
 ```
 
 报告会输出：

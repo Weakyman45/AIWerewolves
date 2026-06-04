@@ -40,6 +40,7 @@ cp .env.example .env
 - `DOUBAO_CODE_MODEL`
 - `LLM_TIMEOUT`
 - `LLM_MAX_RETRIES`
+- `LLM_MAX_TOKENS`
 
 ### 后端启动
 ```bash
@@ -113,6 +114,17 @@ python evaluate_evolution.py \
   --games 20 \
   --min-successful-games 16 \
   --game-timeout 60
+```
+
+真实评估如果模型响应慢，建议先用：
+
+```bash
+LLM_TIMEOUT=60 LLM_MAX_RETRIES=0 LLM_MAX_TOKENS=160 python evaluate_evolution.py \
+  --baseline v0.0.4 \
+  --candidate v0.0.8 \
+  --games 2 \
+  --min-successful-games 2 \
+  --game-timeout 240
 ```
 
 ### 验证命令

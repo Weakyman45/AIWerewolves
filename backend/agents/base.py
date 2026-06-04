@@ -29,6 +29,7 @@ class BaseAgent(ABC):
             temperature=0.8,
             timeout=settings.LLM_TIMEOUT,
             max_retries=settings.LLM_MAX_RETRIES,
+            max_tokens=settings.LLM_MAX_TOKENS,
         )
         self.conversation_history: List[Dict[str, str]] = []
         self.private_knowledge: List[str] = []
@@ -329,6 +330,7 @@ class BaseAgent(ABC):
         prompt = ChatPromptTemplate.from_messages([
             ("system", self.get_effective_system_prompt()),
             ("system", "你需要根据游戏状态做出决策。请以JSON格式输出，格式如下：\n{format_instructions}"),
+            ("system", "回答必须简短，只输出JSON对象；reasoning和speech都控制在80个中文字符以内。"),
             ("user", "{game_state}\n\n当前需要做出的决策类型：{action_type}\n{extra_instructions}")
         ])
         

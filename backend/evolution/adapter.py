@@ -31,6 +31,7 @@ class Adapter:
             temperature=0.7,
             timeout=settings.LLM_TIMEOUT,
             max_retries=settings.LLM_MAX_RETRIES,
+            max_tokens=settings.LLM_MAX_TOKENS,
         )
         self.code_llm = ChatOpenAI(
             api_key=settings.DOUBAO_API_KEY,
@@ -39,6 +40,7 @@ class Adapter:
             temperature=0.3,
             timeout=settings.LLM_TIMEOUT,
             max_retries=settings.LLM_MAX_RETRIES,
+            max_tokens=settings.LLM_MAX_TOKENS,
         )
 
     def optimize_prompt(self, original_prompt: str, role: str, 

@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     DOUBAO_CODE_MODEL: str
     LLM_TIMEOUT: float = 30.0
     LLM_MAX_RETRIES: int = 1
+    LLM_MAX_TOKENS: int = 256
 
     LOG_DIR: str = "./logs"
     STRATEGY_DIR: str = "./strategies"
