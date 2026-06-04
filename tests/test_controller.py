@@ -158,6 +158,37 @@ def test_controller_skip_ab_creates_unaccepted_candidate(tmp_path):
     assert controller.version_control.get_latest_pointer() == "v0.0.1"
 
 
+def test_controller_mock_runner_generates_completed_training_game(tmp_path):
+    version_control = VersionControl(strategy_dir=str(tmp_path / "strategies"))
+    version_control.create_version(
+        "v0.0.1",
+        prompts={
+            "werewolf": "werewolf prompt",
+            "seer": "seer prompt",
+            "witch": "witch prompt",
+            "hunter": "hunter prompt",
+            "villager": "villager prompt",
+        },
+    )
+
+    controller = EvolutionController(
+        initial_version="v0.0.1",
+        num_games_per_iteration=1,
+        strategy_dir=str(tmp_path / "strategies"),
+        log_dir=str(tmp_path / "logs"),
+        skip_ab=True,
+        fallback_only=True,
+        game_runner="mock",
+    )
+
+    result = asyncio.run(controller._run_evolution_iteration(1))
+
+    assert result["analysis"]["game_count"] == 1
+    assert result["analysis"]["training_summary"]["completed"] == 1
+    assert result["analysis"]["training_summary"]["failed"] == 0
+    assert controller.version_control.get_latest_pointer() == "v0.0.1"
+
+
 def test_controller_uses_next_available_candidate_version(tmp_path):
     version_control = VersionControl(strategy_dir=str(tmp_path))
     prompts = {

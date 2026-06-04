@@ -17,6 +17,7 @@ class EvolutionController:
                  skip_ab: bool = False,
                  dry_run: bool = False,
                  fallback_only: bool = False,
+                 game_runner: str = "live",
                  game_timeout: Optional[float] = None,
                  strategy_dir: Optional[str] = None,
                  log_dir: Optional[str] = None):
@@ -24,7 +25,12 @@ class EvolutionController:
         self.version_control = VersionControl(strategy_dir)
         self.analyzer = Analyzer()
         self.adapter = Adapter(fallback_only=fallback_only)
-        self.ab_testing = ABTesting(strategy_dir, game_timeout=game_timeout)
+        self.ab_testing = ABTesting(
+            strategy_dir,
+            game_timeout=game_timeout,
+            game_runner=game_runner,
+            log_dir=log_dir,
+        )
 
         self.current_version = initial_version or self.version_control.get_latest_version()
         self.num_games_per_iteration = num_games_per_iteration
@@ -33,6 +39,7 @@ class EvolutionController:
         self.skip_ab = skip_ab
         self.dry_run = dry_run
         self.fallback_only = fallback_only
+        self.game_runner = game_runner
         self.game_timeout = game_timeout
         
         self.evolution_history = []
@@ -152,7 +159,10 @@ class EvolutionController:
         }
 
     async def _generate_training_games(self) -> List[Dict[str, Any]]:
-        from backend.engine.game import WerewolfGame
+        if self.game_runner == "live":
+            from backend.engine.game import WerewolfGame
+        else:
+            from backend.evolution.mock_game import MockGameRunner
 
         player_names = ["Alice", "Bob", "Charlie", "David", "Eve", "Frank"]
         results = []
@@ -161,8 +171,17 @@ class EvolutionController:
         
         for i in range(self.num_games_per_iteration):
             print(f"    游戏 {i+1}/{self.num_games_per_iteration} 开始...")
-            logger = GameLogger()
-            game = WerewolfGame(player_names, logger)
+            logger = GameLogger(log_dir=self.parser.log_dir)
+            if self.game_runner == "live":
+                game = WerewolfGame(player_names, logger)
+            else:
+                game = MockGameRunner(
+                    player_names,
+                    logger,
+                    seed_key=f"train:{self.current_version}:{i + 1}",
+                    werewolf_version=self.current_version,
+                    other_version=self.current_version,
+                )
             
             try:
                 print(f"    游戏 {i+1}: 正在运行...")
@@ -171,13 +190,15 @@ class EvolutionController:
                 else:
                     winner = await game.run()
                 print(f"    游戏 {i+1}: 运行完成")
+                winner_value = winner.value if hasattr(winner, "value") else winner
                 
                 game_data = {
                     "game_id": game.game_id,
-                    "winner": winner,
+                    "winner": winner_value,
                     "status": "completed",
                     "error": None,
                     "error_type": None,
+                    "runner": self.game_runner,
                     "timestamp": datetime.now().isoformat(),
                 }
                 
@@ -188,7 +209,7 @@ class EvolutionController:
                     game_data
                 )
                 
-                print(f"    游戏 {i+1}/{self.num_games_per_iteration}: {winner} 获胜")
+                print(f"    游戏 {i+1}/{self.num_games_per_iteration}: {winner_value} 获胜")
                 
             except asyncio.TimeoutError as e:
                 game_data = self._build_failed_game_result(game, e, "timed_out")

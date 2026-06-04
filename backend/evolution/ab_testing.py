@@ -6,10 +6,18 @@ from backend.evolution.version_control import VersionControl
 
 
 class ABTesting:
-    def __init__(self, strategy_dir: Optional[str] = None, game_timeout: Optional[float] = None):
+    def __init__(
+        self,
+        strategy_dir: Optional[str] = None,
+        game_timeout: Optional[float] = None,
+        game_runner: str = "live",
+        log_dir: Optional[str] = None,
+    ):
         self.results = []
         self.version_control = VersionControl(strategy_dir)
         self.game_timeout = game_timeout
+        self.game_runner = game_runner
+        self.log_dir = log_dir
 
     async def run_comparison(self, version_a: str, version_b: str, 
                          num_games: int = 10,
@@ -87,11 +95,25 @@ class ABTesting:
 
     async def _run_single_game(self, werewolf_version: str, other_version: str,
                           player_names: List[str]) -> Dict[str, Any]:
-        from backend.engine.game import WerewolfGame
+        if getattr(self, "game_runner", "live") == "live":
+            from backend.engine.game import WerewolfGame
+        else:
+            from backend.evolution.mock_game import MockGameRunner
 
-        logger = GameLogger()
-        strategy_prompts = self._build_strategy_prompts(werewolf_version, other_version)
-        game = WerewolfGame(player_names, logger, strategy_prompts=strategy_prompts)
+        logger = GameLogger(log_dir=getattr(self, "log_dir", None) or "./logs")
+        if getattr(self, "game_runner", "live") == "live":
+            strategy_prompts = self._build_strategy_prompts(werewolf_version, other_version)
+            game = WerewolfGame(player_names, logger, strategy_prompts=strategy_prompts)
+        else:
+            game_index = getattr(self, "_mock_game_counter", 0) + 1
+            self._mock_game_counter = game_index
+            game = MockGameRunner(
+                player_names,
+                logger,
+                seed_key=f"ab:{werewolf_version}:{other_version}:{game_index}",
+                werewolf_version=werewolf_version,
+                other_version=other_version,
+            )
         
         try:
             if self.game_timeout:
@@ -103,6 +125,7 @@ class ABTesting:
                 "game_id": game.game_id,
                 "winner": winner.value if hasattr(winner, "value") else winner,
                 "error": None,
+                "runner": getattr(self, "game_runner", "live"),
             }
         except Exception as e:
             print(f"游戏运行出错: {e}")
@@ -112,6 +135,7 @@ class ABTesting:
                 "winner": None,
                 "error": str(e),
                 "error_type": type(e).__name__,
+                "runner": getattr(self, "game_runner", "live"),
             }
 
     def _build_strategy_prompts(self, werewolf_version: str, other_version: str) -> Dict[str, str]:

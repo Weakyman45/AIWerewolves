@@ -84,7 +84,10 @@ def test_run_single_game_reports_timeout(tmp_path, monkeypatch):
     async def slow_run(self):
         await asyncio.sleep(1)
 
-    monkeypatch.setattr("backend.evolution.ab_testing.GameLogger", lambda: GameLogger(log_dir=str(tmp_path)))
+    monkeypatch.setattr(
+        "backend.evolution.ab_testing.GameLogger",
+        lambda log_dir="./logs": GameLogger(log_dir=str(tmp_path)),
+    )
     monkeypatch.setattr("backend.engine.game.WerewolfGame.run", slow_run)
 
     result = asyncio.run(
@@ -98,3 +101,23 @@ def test_run_single_game_reports_timeout(tmp_path, monkeypatch):
     assert result["success"] is False
     assert result["winner"] is None
     assert result["error_type"] == "TimeoutError"
+
+
+def test_run_single_game_uses_mock_runner(tmp_path):
+    ab_testing = ABTesting(
+        strategy_dir=str(tmp_path / "strategies"),
+        game_runner="mock",
+        log_dir=str(tmp_path / "logs"),
+    )
+
+    result = asyncio.run(
+        ab_testing._run_single_game(
+            "v0.0.1",
+            "v0.0.2",
+            ["Alice", "Bob", "Charlie", "David", "Eve", "Frank"],
+        )
+    )
+
+    assert result["success"] is True
+    assert result["winner"] in {"werewolves", "villagers"}
+    assert result["runner"] == "mock"
