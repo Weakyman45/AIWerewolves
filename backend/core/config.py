@@ -9,6 +9,8 @@ class Settings(BaseSettings):
     DOUBAO_BASE_URL: str = "https://ark.cn-beijing.volces.com/api/v3"
     DOUBAO_MODEL: str
     DOUBAO_CODE_MODEL: str
+    LLM_TIMEOUT: float = 30.0
+    LLM_MAX_RETRIES: int = 1
 
     LOG_DIR: str = "./logs"
     STRATEGY_DIR: str = "./strategies"

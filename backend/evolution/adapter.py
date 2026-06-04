@@ -21,12 +21,16 @@ class Adapter:
             base_url=settings.DOUBAO_BASE_URL,
             model=settings.DOUBAO_MODEL,
             temperature=0.7,
+            timeout=settings.LLM_TIMEOUT,
+            max_retries=settings.LLM_MAX_RETRIES,
         )
         self.code_llm = ChatOpenAI(
             api_key=settings.DOUBAO_API_KEY,
             base_url=settings.DOUBAO_BASE_URL,
             model=settings.DOUBAO_CODE_MODEL,
             temperature=0.3,
+            timeout=settings.LLM_TIMEOUT,
+            max_retries=settings.LLM_MAX_RETRIES,
         )
 
     def optimize_prompt(self, original_prompt: str, role: str, 

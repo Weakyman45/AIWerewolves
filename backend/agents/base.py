@@ -26,7 +26,9 @@ class BaseAgent(ABC):
             api_key=settings.DOUBAO_API_KEY,
             base_url=settings.DOUBAO_BASE_URL,
             model=settings.DOUBAO_MODEL,
-            temperature=0.8
+            temperature=0.8,
+            timeout=settings.LLM_TIMEOUT,
+            max_retries=settings.LLM_MAX_RETRIES,
         )
         self.conversation_history: List[Dict[str, str]] = []
         self.private_knowledge: List[str] = []
