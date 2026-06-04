@@ -121,3 +121,14 @@ def test_run_single_game_uses_mock_runner(tmp_path):
     assert result["success"] is True
     assert result["winner"] in {"werewolves", "villagers"}
     assert result["runner"] == "mock"
+
+
+def test_statistical_significance_uses_exact_binomial_p_value():
+    ab_testing = ABTesting.__new__(ABTesting)
+
+    result = ab_testing.calculate_statistical_significance(
+        {"a_wins": 0, "b_wins": 4}
+    )
+
+    assert result["p_value"] == 0.125
+    assert result["significant"] is False

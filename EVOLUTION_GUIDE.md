@@ -162,7 +162,49 @@ LLM_TIMEOUT=15 LLM_MAX_RETRIES=0 python run_evolution.py \
   --game-timeout 45
 ```
 
+## 进化效果评估
+
+`run_evolution.py` 负责训练和生成候选；`evaluate_evolution.py` 专门回答"候选版本是否真的强于基线"。
+
+离线评估示例：
+
+```bash
+python evaluate_evolution.py \
+  --baseline v0.0.1 \
+  --candidate v0.0.2 \
+  --games 4 \
+  --min-successful-games 4 \
+  --game-runner mock
+```
+
+真实评估示例：
+
+```bash
+python evaluate_evolution.py \
+  --baseline v0.0.1 \
+  --candidate v0.0.8 \
+  --games 20 \
+  --min-successful-games 16 \
+  --game-timeout 60
+```
+
+报告会输出：
+
+- `PASSED`：候选版本胜率高于基线，且成功局数达到要求
+- `FAILED`：候选版本没有超过基线
+- `INCONCLUSIVE`：成功样本不足，不能得出结论
+
+默认报告写入 `reports/`，该目录不会进入Git。
+
+退出码：
+
+- `0`：`PASSED`
+- `1`：`FAILED`
+- `2`：`INCONCLUSIVE`
+
 ## CLI 参数
+
+### `run_evolution.py`
 
 | 参数 | 默认值 | 说明 |
 | ---- | ------ | ---- |
@@ -176,6 +218,21 @@ LLM_TIMEOUT=15 LLM_MAX_RETRIES=0 python run_evolution.py \
 | `--game-runner` | `live` | `live` 使用真实Agent，`mock` 使用确定性离线对局 |
 | `--game-timeout` | `300` | 单局真实/模拟对局超时时间，单位秒 |
 | `--initial-version` | latest | 指定起始策略版本 |
+
+### `evaluate_evolution.py`
+
+| 参数 | 默认值 | 说明 |
+| ---- | ------ | ---- |
+| `--baseline` | required | 基线策略版本 |
+| `--candidate` | latest | 候选策略版本 |
+| `--games` | `20` | A/B评估对局数 |
+| `--min-successful-games` | `games` | 得出结论所需的最少成功局数 |
+| `--improvement-threshold` | `0.0` | 候选需要超过基线的最低胜率提升 |
+| `--game-runner` | `live` | `live` 使用真实Agent，`mock` 使用确定性离线对局 |
+| `--game-timeout` | `300` | 单局超时时间，单位秒 |
+| `--strategy-dir` | `.env`配置 | 策略目录 |
+| `--log-dir` | `.env`配置 | 日志目录 |
+| `--output` | `reports/*.md` | Markdown报告输出路径 |
 
 ## 目录结构
 
@@ -289,4 +346,4 @@ print(f"优化后Prompt: {optimized['optimized']}")
 - 先运行离线闭环：`python run_evolution.py --iterations 1 --train-games 1 --ab-games 4 --fallback-only --game-runner mock`
 - 再运行小规模真实对局验证API稳定性
 - 查看 `strategies/v*/metadata.json`，确认 `analysis_summary` 和 `training_summary`
-- 扩大真实A/B对局数，评估策略效果
+- 用 `evaluate_evolution.py` 扩大真实A/B对局数，评估策略效果

@@ -4,6 +4,7 @@ from .analyzer import Analyzer
 from .adapter import Adapter
 from .ab_testing import ABTesting
 from .controller import EvolutionController
+from .evaluation import render_evaluation_report, run_evolution_evaluation, summarize_evaluation
 
 __all__ = [
     "LogParser",
@@ -12,4 +13,7 @@ __all__ = [
     "Adapter",
     "ABTesting",
     "EvolutionController",
+    "render_evaluation_report",
+    "run_evolution_evaluation",
+    "summarize_evaluation",
 ]

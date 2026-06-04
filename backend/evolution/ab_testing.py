@@ -249,15 +249,17 @@ class ABTesting:
 
     def _calculate_p_value(self, a_wins: int, b_wins: int, total: int) -> float:
         import math
-        
-        expected = total / 2
-        variance = total * 0.5 * 0.5
-        std_dev = math.sqrt(variance)
-        
-        z_score = (abs(a_wins - expected) - 0.5) / std_dev if std_dev > 0 else 0
-        
-        p_value = 2 * (1 - self._normal_cdf(z_score))
-        
+
+        if total <= 0:
+            return 1.0
+
+        smaller_side_wins = min(a_wins, b_wins)
+        one_tail = sum(
+            math.comb(total, wins) * (0.5 ** total)
+            for wins in range(smaller_side_wins + 1)
+        )
+        p_value = 2 * one_tail
+
         return max(0.0, min(1.0, p_value))
 
     def _normal_cdf(self, x: float) -> float:

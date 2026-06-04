@@ -28,6 +28,7 @@ auto_run_progress.json
 logs/*.json
 logs/*.log
 logs/*.jsonl
+reports/
 strategies/
 !strategies/.gitkeep
 node_modules/

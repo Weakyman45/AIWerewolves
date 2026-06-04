@@ -104,6 +104,17 @@ python run_evolution.py \
   --game-timeout 60
 ```
 
+确认候选版本是否真的优于基线：
+
+```bash
+python evaluate_evolution.py \
+  --baseline v0.0.1 \
+  --candidate v0.0.8 \
+  --games 20 \
+  --min-successful-games 16 \
+  --game-timeout 60
+```
+
 ### 验证命令
 
 ```bash
