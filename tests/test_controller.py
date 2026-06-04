@@ -168,3 +168,24 @@ def test_controller_uses_next_available_candidate_version(tmp_path):
 
     assert new_version == "v0.0.3"
     assert version_control.version_exists("v0.0.3")
+
+
+def test_controller_analyzes_only_completed_games():
+    controller = EvolutionController.__new__(EvolutionController)
+    controller.parser = type(
+        "FakeParser",
+        (),
+        {
+            "parse_all_games": lambda self: [
+                {"game_id": "complete", "winner": "werewolves", "metrics": {}, "raw_events": []},
+                {"game_id": "incomplete", "winner": None, "metrics": {}, "raw_events": []},
+            ],
+            "parse_game": lambda self, game_id: None,
+        },
+    )()
+    controller.analyzer = EvolutionController().analyzer
+
+    analysis = controller._analyze_game_results([])
+
+    assert analysis["aggregate"]["total_games"] == 1
+    assert analysis["aggregate"]["werewolf_win_rate"] == 1.0

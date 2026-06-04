@@ -188,12 +188,19 @@ class EvolutionController:
         return results
 
     def _analyze_game_results(self, game_results: List[Dict[str, Any]]) -> Dict[str, Any]:
-        all_games = self.parser.parse_all_games()
+        all_games = [
+            game for game in self.parser.parse_all_games()
+            if game.get("winner") in {"werewolves", "villagers"}
+        ]
         
         for game_result in game_results:
             game_id = game_result.get("game_id")
             parsed_game = self.parser.parse_game(game_id)
-            if parsed_game and game_id not in [g.get("game_id") for g in all_games]:
+            if (
+                parsed_game
+                and parsed_game.get("winner") in {"werewolves", "villagers"}
+                and game_id not in [g.get("game_id") for g in all_games]
+            ):
                 all_games.append(parsed_game)
         
         aggregate_analysis = self.analyzer.analyze_multiple_games(all_games)
