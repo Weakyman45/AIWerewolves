@@ -9,7 +9,8 @@ from backend.core.config import settings
 
 
 class AgentAction(BaseModel):
-    target_id: Optional[str] = Field(description="目标玩家ID，如果没有则为null")
+    decision_type: Optional[str] = Field(default=None, description="动作类型，例如run/stay/retreat/vote等")
+    target_id: Optional[str] = Field(default=None, description="目标玩家ID，如果没有则为null")
     reasoning: str = Field(description="决策推理过程")
     speech: str = Field(description="发言内容")
     will_retreat: Optional[bool] = Field(default=False, description="是否退水（仅警长竞选阶段）")
@@ -67,8 +68,19 @@ class BaseAgent(ABC):
         
         action = await self._call_llm_for_action(game_state, "sheriff_election", extra_instructions)
         
-        decision_type = action.reasoning.lower()
-        if "run" in decision_type or "上警" in action.speech:
+        explicit_decision = (action.decision_type or "").lower()
+        if explicit_decision in {"run", "stay"}:
+            decision_type = explicit_decision
+        else:
+            decision_text = f"{action.reasoning} {action.speech}".lower()
+            if any(phrase in decision_text for phrase in ["不上警", "不 上警", "不竞选警长", "不参与竞选", "留警下", "待在警下"]):
+                decision_type = "stay"
+            elif "run" in decision_text or "上警" in decision_text or "竞选警长" in decision_text:
+                decision_type = "run"
+            else:
+                decision_type = "stay"
+
+        if decision_type == "run":
             return AgentDecision(
                 decision_type="run",
                 target_id=None,
@@ -109,8 +121,19 @@ class BaseAgent(ABC):
         
         action = await self._call_llm_for_action(game_state, "sheriff_retreat", extra_instructions)
         
-        decision_type = action.reasoning.lower()
-        if "retreat" in decision_type or "退水" in action.speech:
+        explicit_decision = (action.decision_type or "").lower()
+        if explicit_decision in {"retreat", "stay"}:
+            decision_type = explicit_decision
+        else:
+            decision_text = f"{action.reasoning} {action.speech}".lower()
+            if any(phrase in decision_text for phrase in ["不退水", "不 退水", "不选择退水", "继续留", "留在警上"]):
+                decision_type = "stay"
+            elif "retreat" in decision_text or "退水" in decision_text:
+                decision_type = "retreat"
+            else:
+                decision_type = "stay"
+
+        if decision_type == "retreat":
             return AgentDecision(
                 decision_type="retreat",
                 target_id=None,
