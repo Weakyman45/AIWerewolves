@@ -834,6 +834,9 @@ class WerewolfGame:
                 a.add_conversation("system", death_msg)
             
             await self._process_hunter_shot(player_id, cause, round_record)
+
+            if self.death_queue:
+                continue
             
             winner = self._check_winner()
             if winner:

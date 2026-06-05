@@ -6,8 +6,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.api import routes
+from backend.agents.roles.hunter import HunterAgent
 from backend.core.logger import GameLogger
-from backend.core.models import Role
+from backend.core.models import AgentDecision, GamePhase, Role, RoundRecord, Team
 from backend.engine.game import WerewolfGame
 from backend.evolution.parser import LogParser
 from backend.main import app
@@ -74,6 +75,35 @@ def test_game_run_logs_errors(tmp_path, monkeypatch):
     assert events[-1]["type"] == "game_error"
     assert events[-1]["error_type"] == "RuntimeError"
     assert events[-1]["error"] == "simulated failure"
+
+
+def test_hunter_shot_resolves_before_winner_check(tmp_path):
+    game = WerewolfGame(
+        ["Hunter", "Wolf", "Villager"],
+        GameLogger(log_dir=str(tmp_path)),
+    )
+    game.players["player_0"] = HunterAgent("player_0", "Hunter")
+    game.player_states["player_0"].role = Role.HUNTER
+    game.player_states["player_1"].role = Role.WEREWOLF
+    game.player_states["player_2"].role = Role.VILLAGER
+
+    async def shoot_wolf(_game_state):
+        return AgentDecision(
+            decision_type="shot",
+            target_id="player_1",
+            reasoning="confirmed wolf",
+            raw_output="shoot wolf",
+        )
+
+    game.players["player_0"].make_shot = shoot_wolf
+    game.death_queue.append(("player_0", "voted_out"))
+    round_record = RoundRecord(round_number=1, phase=GamePhase.DAY)
+
+    asyncio.run(game._process_deaths(round_record))
+
+    assert round_record.deaths == ["player_0", "player_1"]
+    assert game.player_states["player_1"].is_alive is False
+    assert game.state.winner == Team.VILLAGERS
 
 
 def test_log_parser_extracts_complete_game(tmp_path):
