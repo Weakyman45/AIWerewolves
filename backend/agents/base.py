@@ -207,8 +207,17 @@ class BaseAgent(ABC):
         
         action = await self._call_llm_for_action(game_state, "speak_direction", extra_instructions)
         
-        decision_type = action.reasoning.lower()
-        if "right" in decision_type or "右边" in action.speech:
+        explicit_decision = (action.decision_type or "").lower()
+        if explicit_decision in {"left", "right"}:
+            direction = explicit_decision
+        else:
+            decision_text = f"{action.reasoning} {action.speech}".lower()
+            if any(phrase in decision_text for phrase in ["right", "右边", "右侧", "从右"]):
+                direction = "right"
+            else:
+                direction = "left"
+
+        if direction == "right":
             return AgentDecision(
                 decision_type="right",
                 target_id=None,

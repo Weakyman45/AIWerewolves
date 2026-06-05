@@ -66,3 +66,30 @@ def test_sheriff_retreat_does_not_treat_negative_text_as_retreat():
     decision = asyncio.run(agent.make_retreat({}))
 
     assert decision.decision_type == "stay"
+
+
+def test_speak_direction_recognizes_right_side_wording():
+    agent = _agent_with_action(
+        AgentAction(
+            reasoning="选右侧发言让查杀位先开口",
+            speech="我选择从右侧开始发言",
+        )
+    )
+
+    decision = asyncio.run(agent.make_speak_direction({}))
+
+    assert decision.decision_type == "right"
+
+
+def test_speak_direction_uses_explicit_decision_type():
+    agent = _agent_with_action(
+        AgentAction(
+            decision_type="left",
+            reasoning="从左边开始",
+            speech="我选择左侧",
+        )
+    )
+
+    decision = asyncio.run(agent.make_speak_direction({}))
+
+    assert decision.decision_type == "left"
