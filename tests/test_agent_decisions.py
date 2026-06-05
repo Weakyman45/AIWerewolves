@@ -93,3 +93,43 @@ def test_speak_direction_uses_explicit_decision_type():
     decision = asyncio.run(agent.make_speak_direction({}))
 
     assert decision.decision_type == "left"
+
+
+def test_sheriff_death_passes_badge_with_chinese_text():
+    agent = _agent_with_action(
+        AgentAction(
+            decision_type="destroy",
+            target_id="player_4",
+            reasoning="警徽给Eve，今天全票出Frank",
+            speech="我把警徽移交给Eve",
+        )
+    )
+
+    decision = asyncio.run(agent.make_sheriff_death_decision({
+        "players": {
+            "player_0": {"name": "Alice", "is_alive": False},
+            "player_4": {"name": "Eve", "is_alive": True},
+        }
+    }))
+
+    assert decision.decision_type == "pass"
+    assert decision.target_id == "player_4"
+
+
+def test_sheriff_death_destroys_badge_with_destroy_text():
+    agent = _agent_with_action(
+        AgentAction(
+            reasoning="我选择撕掉警徽",
+            speech="警徽流失，本局不再有警长",
+        )
+    )
+
+    decision = asyncio.run(agent.make_sheriff_death_decision({
+        "players": {
+            "player_0": {"name": "Alice", "is_alive": False},
+            "player_4": {"name": "Eve", "is_alive": True},
+        }
+    }))
+
+    assert decision.decision_type == "destroy"
+    assert decision.target_id is None

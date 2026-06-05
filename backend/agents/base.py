@@ -274,10 +274,25 @@ class BaseAgent(ABC):
         if target_id and target_id not in [p["player_id"] for p in alive_players]:
             target_id = alive_players[0]["player_id"]
         
-        # 从 reasoning 中推断 decision_type
-        decision_type = "destroy"
-        if action.reasoning and "pass" in action.reasoning.lower() and target_id:
+        explicit_decision = (action.decision_type or "").lower()
+        decision_text = f"{action.reasoning or ''} {action.speech or ''}".lower()
+        wants_destroy = any(
+            keyword in decision_text
+            for keyword in ["destroy", "撕掉", "撕毁", "撕警徽", "警徽流失", "不再有警长"]
+        )
+        wants_pass = bool(target_id) and any(
+            keyword in decision_text
+            for keyword in ["pass", "移交", "传给", "交给", "警徽给", "给"]
+        )
+        
+        if target_id and (explicit_decision == "pass" or wants_pass) and not wants_destroy:
             decision_type = "pass"
+        elif explicit_decision == "destroy" or wants_destroy:
+            decision_type = "destroy"
+        elif target_id:
+            decision_type = "pass"
+        else:
+            decision_type = "destroy"
         
         return AgentDecision(
             decision_type=decision_type,
