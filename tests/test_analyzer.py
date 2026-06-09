@@ -138,3 +138,46 @@ def test_analyzer_aggregate_ignores_empty_samples():
         "sample_size": 1,
         "game_count": 1,
     }
+
+
+def test_analyzer_tracks_rule_repairs_and_llm_fallbacks():
+    game_data = {
+        "winner": "villagers",
+        "players": {
+            "player_0": {"name": "Alice", "role": "werewolf"},
+            "player_1": {"name": "Bob", "role": "villager"},
+        },
+        "metrics": {"duration_rounds": 1},
+        "raw_events": [
+            {
+                "type": "agent_decision",
+                "player_id": "player_1",
+                "decision": {
+                    "reasoning": "模型输出越界；修正非预言家越权报查验/跳预言家",
+                },
+            },
+            {
+                "type": "agent_decision",
+                "player_id": "player_0",
+                "decision": {
+                    "reasoning": "本局未被授权悍跳，狼人不能上警冒充预言家",
+                },
+            },
+            {
+                "type": "agent_decision",
+                "player_id": "player_0",
+                "decision": {
+                    "reasoning": "LLM调用失败，使用werewolf默认决策；已公开跳预言家，禁止退水改口",
+                },
+            },
+        ],
+    }
+
+    analysis = Analyzer().analyze_game(game_data)
+    aggregate = Analyzer().analyze_multiple_games([game_data])
+
+    assert analysis["quality_metrics"]["nonseer_claim_repairs"] == 1
+    assert analysis["quality_metrics"]["unauthorized_werewolf_fake_seer_blocks"] == 1
+    assert analysis["quality_metrics"]["llm_fallbacks"] == 1
+    assert analysis["quality_metrics"]["public_claim_consistency_repairs"] == 1
+    assert aggregate["quality_metrics"]["counts"]["total_rule_repairs"] == 3

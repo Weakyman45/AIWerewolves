@@ -14,12 +14,16 @@ async def run_evolution_evaluation(
     log_dir: Optional[str] = None,
     min_successful_games: Optional[int] = None,
     improvement_threshold: float = 0.0,
+    parallel_decisions: Optional[bool] = None,
+    decision_delay: Optional[float] = None,
 ) -> Dict[str, Any]:
     ab_testing = ABTesting(
         strategy_dir=strategy_dir,
         game_timeout=game_timeout,
         game_runner=game_runner,
         log_dir=log_dir,
+        parallel_decisions=parallel_decisions,
+        decision_delay=decision_delay,
     )
     ab_result = await ab_testing.run_comparison(
         baseline_version,

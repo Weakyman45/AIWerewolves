@@ -12,12 +12,20 @@ class ABTesting:
         game_timeout: Optional[float] = None,
         game_runner: str = "live",
         log_dir: Optional[str] = None,
+        parallel_decisions: Optional[bool] = None,
+        decision_delay: Optional[float] = None,
     ):
         self.results = []
         self.version_control = VersionControl(strategy_dir)
         self.game_timeout = game_timeout
         self.game_runner = game_runner
         self.log_dir = log_dir
+        self.parallel_decisions = (
+            parallel_decisions if parallel_decisions is not None else game_runner != "live-fast"
+        )
+        self.decision_delay = (
+            decision_delay if decision_delay is not None else (2.0 if game_runner == "live-fast" else 0.0)
+        )
 
     async def run_comparison(self, version_a: str, version_b: str, 
                          num_games: int = 10,
@@ -104,7 +112,11 @@ class ABTesting:
         logger = GameLogger(log_dir=getattr(self, "log_dir", None) or "./logs")
         if game_runner in {"live", "live-fast"}:
             strategy_prompts = self._build_strategy_prompts(werewolf_version, other_version)
-            game_kwargs = {"strategy_prompts": strategy_prompts}
+            game_kwargs = {
+                "strategy_prompts": strategy_prompts,
+                "parallel_decisions": getattr(self, "parallel_decisions", game_runner != "live-fast"),
+                "decision_delay": getattr(self, "decision_delay", 2.0 if game_runner == "live-fast" else 0.0),
+            }
             if game_runner == "live-fast":
                 game_kwargs.update({
                     "skip_sheriff": True,
@@ -129,6 +141,18 @@ class ABTesting:
                 winner = await asyncio.wait_for(game.run(), timeout=self.game_timeout)
             else:
                 winner = await game.run()
+            llm_failures = self._collect_llm_failures(game)
+            if llm_failures:
+                return {
+                    "success": False,
+                    "game_id": game.game_id,
+                    "winner": None,
+                    "observed_winner": winner.value if hasattr(winner, "value") else winner,
+                    "error": "One or more LLM calls fell back to default decisions.",
+                    "error_type": "LLMFallbackUsed",
+                    "runner": getattr(self, "game_runner", "live"),
+                    "llm_failures": llm_failures,
+                }
             return {
                 "success": True,
                 "game_id": game.game_id,
@@ -146,6 +170,19 @@ class ABTesting:
                 "error_type": type(e).__name__,
                 "runner": getattr(self, "game_runner", "live"),
             }
+
+    def _collect_llm_failures(self, game) -> List[Dict[str, Any]]:
+        failures = []
+        for player_id, agent in getattr(game, "players", {}).items():
+            failure_count = getattr(agent, "llm_failure_count", 0)
+            if failure_count:
+                failures.append({
+                    "player_id": player_id,
+                    "role": getattr(getattr(agent, "role", None), "value", None),
+                    "count": failure_count,
+                    "errors": getattr(agent, "llm_failure_errors", []),
+                })
+        return failures
 
     def _build_strategy_prompts(self, werewolf_version: str, other_version: str) -> Dict[str, str]:
         prompts = {}

@@ -71,10 +71,11 @@ npm run dev
 - 胜率提升追踪
 - 离线 mock 演化模式，不依赖真实 LLM/API
 - 失败/超时训练局结构化统计
+- 前端展示闭环阶段、A/B结果、版本回溯、运行健康与 bad case 质量守卫
 
 ### 常用演化命令
 
-离线闭环验证，不调用真实 LLM：
+离线闭环验证，不调用真实 LLM。用于答辩演示系统机制和回归测试，不代表真实模型胜率：
 
 ```bash
 python run_evolution.py \
@@ -95,7 +96,7 @@ python run_evolution.py \
   --fallback-only
 ```
 
-真实 LLM 对局运行：
+真实 LLM 对局运行，用于验证 Agent 在真实模型调用下的稳定性：
 
 ```bash
 python run_evolution.py \
@@ -105,7 +106,7 @@ python run_evolution.py \
   --game-timeout 60
 ```
 
-确认候选版本是否真的优于基线：
+确认候选版本是否真的优于基线。真实效果证明应优先使用该命令扩大样本：
 
 ```bash
 python evaluate_evolution.py \
@@ -148,4 +149,10 @@ cd frontend && npm run lint && npm run build
 - ✅ 策略版本管理与回滚
 - ✅ 数据驱动Prompt补丁
 - ✅ mock 离线演化闭环测试
+- ✅ 自进化观战面板：闭环阶段、A/B验证、版本回溯、bad case统计
+- ✅ 底牌边界守卫：只有预言家和唯一授权悍跳狼可以跳预言家
 - ⏳ 真实 LLM 长跑稳定性与效果验证
+
+## Rubric 对照
+
+最后交付检查见 `docs/rubric-readiness.md`。该文档把单 Agent 能力、多 Agent 协作、工程完整度和自进化 Agent 四个维度映射到代码实现、测试证据和演示入口。

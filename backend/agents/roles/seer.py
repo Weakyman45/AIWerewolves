@@ -28,10 +28,18 @@ class SeerAgent(BaseAgent):
 
     async def make_night_action(self, game_state):
         alive_players = self._get_alive_players(game_state)
+        unavailable_targets = set(game_state.get("night_unavailable_target_ids", []))
         
-        unchecked = [p for p in alive_players if p["player_id"] not in self.check_results]
+        unchecked = [
+            p for p in alive_players
+            if p["player_id"] not in self.check_results
+            and p["player_id"] not in unavailable_targets
+        ]
         if not unchecked:
-            unchecked = alive_players
+            unchecked = [
+                p for p in alive_players
+                if p["player_id"] not in unavailable_targets
+            ] or alive_players
         
         check_str = "\n".join([f"- {pid}: {'狼人' if is_wolf else '好人'}" for pid, is_wolf in self.check_results.items()])
         if check_str:

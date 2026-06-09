@@ -18,6 +18,7 @@ class Analyzer:
             "hunter": self._analyze_hunter(game_data),
             "villager": self._analyze_villager(game_data),
             "mistakes": self._find_mistakes(game_data),
+            "quality_metrics": self._analyze_quality_metrics(game_data),
         }
         return analysis
 
@@ -34,6 +35,7 @@ class Analyzer:
             "average_rounds": self._calculate_average_rounds(games_data),
             "role_analysis": self._aggregate_role_analysis(all_analyses),
             "common_mistakes": self._aggregate_mistakes(all_analyses),
+            "quality_metrics": self._aggregate_quality_metrics(all_analyses),
         }
         return aggregate
 
@@ -98,6 +100,38 @@ class Analyzer:
                 mistakes.append(mistake)
         
         return mistakes
+
+    def _analyze_quality_metrics(self, game_data: Dict[str, Any]) -> Dict[str, Any]:
+        metrics = {
+            "nonseer_claim_repairs": 0,
+            "llm_fallbacks": 0,
+            "unauthorized_werewolf_fake_seer_blocks": 0,
+            "public_claim_consistency_repairs": 0,
+        }
+
+        for event in game_data.get("raw_events", []):
+            decision = event.get("decision", {}) if event.get("type") == "agent_decision" else {}
+            reasoning = decision.get("reasoning") or ""
+
+            if "修正非预言家越权" in reasoning:
+                metrics["nonseer_claim_repairs"] += 1
+            if "LLM调用失败" in reasoning:
+                metrics["llm_fallbacks"] += 1
+            if "未被授权悍跳" in reasoning or "避免未授权" in reasoning:
+                metrics["unauthorized_werewolf_fake_seer_blocks"] += 1
+            if (
+                "身份前后矛盾" in reasoning
+                or "禁止退水改口" in reasoning
+                or "不允许继续维持该声明" in reasoning
+            ):
+                metrics["public_claim_consistency_repairs"] += 1
+
+        metrics["total_rule_repairs"] = (
+            metrics["nonseer_claim_repairs"]
+            + metrics["unauthorized_werewolf_fake_seer_blocks"]
+            + metrics["public_claim_consistency_repairs"]
+        )
+        return metrics
 
     def _check_event_for_mistake(self, event: Dict[str, Any], players: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         event_type = event.get("type")
@@ -353,6 +387,26 @@ class Analyzer:
             "total": sum(mistake_counts.values()),
         }
 
+    def _aggregate_quality_metrics(self, all_analyses: List[Dict[str, Any]]) -> Dict[str, Any]:
+        totals = defaultdict(int)
+        for analysis in all_analyses:
+            for key, value in analysis.get("quality_metrics", {}).items():
+                if isinstance(value, int):
+                    totals[key] += value
+
+        return {
+            "counts": dict(totals),
+            "total": sum(
+                totals.get(key, 0)
+                for key in [
+                    "nonseer_claim_repairs",
+                    "llm_fallbacks",
+                    "unauthorized_werewolf_fake_seer_blocks",
+                    "public_claim_consistency_repairs",
+                ]
+            ),
+        }
+
     def generate_optimization_suggestions(self, aggregate_analysis: Dict[str, Any]) -> List[Dict[str, Any]]:
         suggestions = []
         role_analysis = aggregate_analysis.get("role_analysis", {})
@@ -408,6 +462,22 @@ class Analyzer:
                 "type": "vote_accuracy",
                 "priority": "medium",
                 "suggestion": "村民投票命中狼人比例偏低，应减少跟风票，强化基于警徽流、票型和发言矛盾的判断",
+            })
+
+        quality_counts = aggregate_analysis.get("quality_metrics", {}).get("counts", {})
+        if quality_counts.get("nonseer_claim_repairs", 0) > 0:
+            suggestions.append({
+                "target": "all",
+                "type": "identity_boundary",
+                "priority": "high",
+                "suggestion": "发现非预言家越权报查验/跳预言家，继续强化底牌边界和身份声明一致性",
+            })
+        if quality_counts.get("llm_fallbacks", 0) > 0:
+            suggestions.append({
+                "target": "all",
+                "type": "runtime_stability",
+                "priority": "high",
+                "suggestion": "存在 LLM 兜底决策，应降低单次输出复杂度并保留可解释 fallback",
             })
         
         suggestions.append({

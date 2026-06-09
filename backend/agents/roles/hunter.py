@@ -21,6 +21,7 @@ class HunterAgent(BaseAgent):
 
 重要规则：
 - 可以根据局势决定是否跳猎人身份
+- 绝对禁止自称预言家或女巫；猎人没有查验、银水或毒药信息
 - 如果跳身份，可以威慑狼人不敢轻易杀你
 - 死亡时，优先带走你认为最可能是狼人的玩家
 - 发言要有逻辑，分析场上局势"""
@@ -71,6 +72,7 @@ class HunterAgent(BaseAgent):
         extra_instructions = """现在是白天发言阶段。
 请根据场上局势发言。
 可以选择跳猎人身份来威慑狼人，也可以隐藏身份。
+禁止跳预言家，禁止编造查验、金水或查杀。
 发言要有逻辑，不要太简短，至少3句话。"""
         
         action = await self._call_llm_for_action(game_state, "day_speech", extra_instructions)

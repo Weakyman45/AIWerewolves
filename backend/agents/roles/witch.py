@@ -36,6 +36,35 @@ class WitchAgent(BaseAgent):
         if victim_id:
             self.add_private_knowledge(f"今晚狼人要杀的玩家是：{victim_id}")
 
+    def _night_decision_type(self, action):
+        explicit = (action.decision_type or "").lower()
+        if explicit in {"save", "poison", "do_nothing"}:
+            return explicit
+
+        decision_text = f"{action.reasoning or ''} {action.speech or ''}".lower()
+        negative_save = any(
+            keyword in decision_text
+            for keyword in ["不救", "不使用解药", "不用解药", "保留解药"]
+        )
+        negative_poison = any(
+            keyword in decision_text
+            for keyword in ["不毒", "不使用毒药", "不用毒药", "保留毒药"]
+        )
+        wants_save = any(
+            keyword in decision_text
+            for keyword in ["save", "解药", "救人", "救起", "救他", "救她", "救 "]
+        )
+        wants_poison = any(
+            keyword in decision_text
+            for keyword in ["poison", "毒药", "毒死", "毒杀", "毒 "]
+        )
+
+        if wants_save and not negative_save:
+            return "save"
+        if wants_poison and not negative_poison:
+            return "poison"
+        return "do_nothing"
+
     async def make_night_action(self, game_state):
         alive_players = self._get_alive_players(game_state)
         
@@ -56,16 +85,16 @@ class WitchAgent(BaseAgent):
             
             action = await self._call_llm_for_action(game_state, "night_action", extra_instructions)
             
-            decision_type = action.reasoning.lower()
+            decision_type = self._night_decision_type(action)
             
-            if "save" in decision_type and self.last_night_kill:
+            if decision_type == "save" and self.last_night_kill:
                 return AgentDecision(
                     decision_type="save",
                     target_id=self.last_night_kill,
                     reasoning=action.reasoning,
                     raw_output=f"救 {self.last_night_kill}"
                 )
-            elif "poison" in decision_type and not self.has_used_poison and action.target_id:
+            elif decision_type == "poison" and not self.has_used_poison and action.target_id:
                 if action.target_id in [p["player_id"] for p in alive_players]:
                     return AgentDecision(
                         decision_type="poison",
@@ -84,9 +113,9 @@ class WitchAgent(BaseAgent):
             
             action = await self._call_llm_for_action(game_state, "night_poison", extra_instructions)
             
-            decision_type = action.reasoning.lower()
+            decision_type = self._night_decision_type(action)
             
-            if "poison" in decision_type and action.target_id:
+            if decision_type == "poison" and action.target_id:
                 if action.target_id in [p["player_id"] for p in alive_players]:
                     return AgentDecision(
                         decision_type="poison",
@@ -117,6 +146,7 @@ class WitchAgent(BaseAgent):
         extra_instructions = """现在是白天发言阶段。
 请根据场上局势发言。
 可以选择跳女巫身份，也可以隐藏身份。
+禁止跳预言家，禁止编造查验、金水或查杀；只能谈自己的女巫药水信息和公开发言逻辑。
 发言要有逻辑，不要太简短，至少3句话。"""
         
         action = await self._call_llm_for_action(game_state, "day_speech", extra_instructions)

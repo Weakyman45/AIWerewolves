@@ -1,5 +1,6 @@
 import asyncio
 
+from backend.agents.roles.werewolf import WerewolfAgent
 from backend.evolution.controller import EvolutionController
 from backend.evolution.version_control import VersionControl
 
@@ -11,6 +12,16 @@ class FakeAdapter:
             "reasoning": f"{role} reasoning",
             "key_changes": [f"{role} change"],
         }
+
+
+def test_initial_and_runtime_werewolf_prompts_share_identity_boundary():
+    controller_prompt = EvolutionController.__new__(EvolutionController)._get_initial_prompts()["werewolf"]
+    runtime_prompt = WerewolfAgent("player_0", "Alice").get_system_prompt()
+
+    for prompt in [controller_prompt, runtime_prompt]:
+        assert "只有被游戏引擎指定为本局唯一悍跳狼时，才允许悍跳预言家" in prompt
+        assert "绝对禁止自称预言家、女巫或猎人" in prompt
+        assert "可以适当跳预言家或其他神职来搅局" not in prompt
 
 
 def test_optimize_strategy_stores_role_metadata(tmp_path):

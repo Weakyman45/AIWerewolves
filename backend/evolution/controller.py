@@ -110,6 +110,7 @@ class EvolutionController:
     async def _run_evolution_iteration(self, iteration: int) -> Dict[str, Any]:
         print(f"\n=== 进化迭代 {iteration} ===")
         print(f"当前版本: {self.current_version}")
+        old_version = self.current_version
         
         if self.dry_run:
             print("1. 生成训练对局... 跳过（dry-run）")
@@ -140,20 +141,32 @@ class EvolutionController:
             
             print("5. 判断是否接受新版本...")
             accepted = self._decide_acceptance(ab_result)
+
+        improvement = ab_result.get("b_win_rate", 0) - ab_result.get("a_win_rate", 0)
+        self._record_candidate_validation(
+            new_version,
+            old_version,
+            accepted,
+            ab_result,
+            improvement,
+        )
         
         if accepted:
             print(f"✓ 接受新版本 {new_version}")
             self.current_version = new_version
+            self.version_control.promote_version(new_version)
         else:
             print(f"✗ 拒绝新版本，保留 {self.current_version}")
-            if self.current_version:
-                self.version_control.rollback(self.current_version)
+            if old_version:
+                self.current_version = old_version
+                self.version_control.rollback(old_version)
         
         return {
             "iteration": iteration,
-            "old_version": self.current_version if not accepted else self._get_previous_version(new_version),
+            "old_version": old_version,
             "new_version": new_version,
             "accepted": accepted,
+            "improvement": improvement,
             "analysis": analysis,
             "ab_result": ab_result,
         }
@@ -173,7 +186,9 @@ class EvolutionController:
             print(f"    游戏 {i+1}/{self.num_games_per_iteration} 开始...")
             logger = GameLogger(log_dir=self.parser.log_dir)
             if self.game_runner in {"live", "live-fast"}:
-                game_kwargs = {}
+                game_kwargs = {
+                    "strategy_prompts": self._load_all_role_prompts(self.current_version),
+                }
                 if self.game_runner == "live-fast":
                     game_kwargs.update({
                         "skip_sheriff": True,
@@ -299,6 +314,9 @@ class EvolutionController:
 
         aggregate = analysis["aggregate"]
         metadata_extra = {
+            "status": "candidate",
+            "accepted": None,
+            "candidate_from": old_version,
             "analysis_summary": {
                 "total_games": aggregate.get("total_games", 0),
                 "werewolf_win_rate": aggregate.get("werewolf_win_rate", 0),
@@ -306,6 +324,7 @@ class EvolutionController:
                 "average_rounds": aggregate.get("average_rounds", 0),
                 "role_analysis": aggregate.get("role_analysis", {}),
                 "common_mistakes": aggregate.get("common_mistakes", {}),
+                "quality_metrics": aggregate.get("quality_metrics", {}),
             },
             "training_summary": analysis.get("training_summary", {}),
             "role_optimizations": role_optimizations,
@@ -317,9 +336,58 @@ class EvolutionController:
             prompts=prompts,
             changes=changes,
             metadata_extra=metadata_extra,
+            update_latest=False,
         )
         
         return new_version
+
+    def _load_all_role_prompts(self, version: Optional[str]) -> Dict[str, str]:
+        if not version:
+            return {}
+        prompts = {}
+        for role in ["werewolf", "seer", "witch", "hunter", "villager"]:
+            prompt = self.version_control.get_prompt(version, role)
+            if prompt:
+                prompts[role] = prompt
+        return prompts
+
+    def _record_candidate_validation(
+        self,
+        version: str,
+        parent_version: Optional[str],
+        accepted: bool,
+        ab_result: Dict[str, Any],
+        improvement: float,
+    ) -> None:
+        metadata = self.version_control.get_metadata(version) or {}
+        metadata.update({
+            "status": "accepted" if accepted else "rejected",
+            "accepted": accepted,
+            "validated_at": datetime.now().isoformat(),
+            "parent": metadata.get("parent") or parent_version,
+            "ab_result": {
+                "version_a": ab_result.get("version_a"),
+                "version_b": ab_result.get("version_b"),
+                "total_games": ab_result.get("total_games", 0),
+                "successful_games": ab_result.get("successful_games", 0),
+                "failed_games": ab_result.get("failed_games", 0),
+                "a_wins": ab_result.get("a_wins", 0),
+                "b_wins": ab_result.get("b_wins", 0),
+                "a_win_rate": ab_result.get("a_win_rate", 0),
+                "b_win_rate": ab_result.get("b_win_rate", 0),
+                "better_version": ab_result.get("better_version"),
+                "statistics": ab_result.get("statistics", {}),
+                "skipped": ab_result.get("skipped", False),
+                "reason": ab_result.get("reason"),
+            },
+            "improvement": improvement,
+            "promotion_summary": (
+                f"A/B 通过，候选胜率提升 {improvement:+.1%}，已晋级为当前上场版本。"
+                if accepted
+                else f"A/B 未通过，候选胜率变化 {improvement:+.1%}，保留 {parent_version}。"
+            ),
+        })
+        self.version_control.update_metadata(version, metadata)
 
     def _get_next_available_version(self, base_version: Optional[str]) -> str:
         next_version = self.version_control.get_next_version(base_version)
@@ -426,7 +494,8 @@ class EvolutionController:
 - 白天发言要装作好人，不要暴露身份
 - 绝对不能说自己是其他玩家的名字，也不能冒充其他具体玩家的身份
 - 绝对不能暴露其他狼人的身份，也不要提到其他狼人的名字
-- 可以适当跳预言家或其他神职来搅局
+- 只有被游戏引擎指定为本局唯一悍跳狼时，才允许悍跳预言家
+- 如果没有被指定为唯一悍跳狼，绝对禁止自称预言家、女巫或猎人，不能编造查验、金水、银水、查杀或枪口
 - 观察其他玩家的发言，找出最可疑的人来投票
 - 你可以在白天发言阶段选择自爆，自爆后你会直接死亡，当前白天立即结束进入黑夜，你没有遗言""",
             

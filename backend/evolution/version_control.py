@@ -19,7 +19,17 @@ class VersionControl:
         versions = self.list_versions()
         if not versions:
             return None
-        return sorted(versions)[-1]
+        return versions[-1]
+
+    def _version_key(self, version: str) -> tuple:
+        parts = version.lstrip("v").split(".")
+        key = []
+        for part in parts:
+            try:
+                key.append(int(part))
+            except ValueError:
+                key.append(0)
+        return tuple(key)
 
     def list_versions(self) -> List[str]:
         versions = []
@@ -29,7 +39,7 @@ class VersionControl:
             item_path = os.path.join(self.strategy_dir, item)
             if os.path.isdir(item_path) and item.startswith("v"):
                 versions.append(item)
-        return sorted(versions)
+        return sorted(versions, key=self._version_key)
 
     def get_version_path(self, version: str) -> str:
         return os.path.join(self.strategy_dir, version)
@@ -40,7 +50,8 @@ class VersionControl:
     def create_version(self, version: str, parent_version: Optional[str] = None, 
                   prompts: Optional[Dict[str, str]] = None,
                   changes: Optional[List[str]] = None,
-                  metadata_extra: Optional[Dict[str, Any]] = None) -> bool:
+                  metadata_extra: Optional[Dict[str, Any]] = None,
+                  update_latest: bool = True) -> bool:
         if self.version_exists(version):
             return False
 
@@ -83,6 +94,13 @@ class VersionControl:
         with open(stats_file, "w", encoding="utf-8") as f:
             json.dump({"games": [], "metrics": {}}, f, ensure_ascii=False, indent=2)
 
+        if update_latest:
+            self._update_latest_pointer(version)
+        return True
+
+    def promote_version(self, version: str) -> bool:
+        if not self.version_exists(version):
+            return False
         self._update_latest_pointer(version)
         return True
 

@@ -107,7 +107,7 @@ python run_evolution.py --iterations 1 --train-games 1 --ab-games 1
 
 ### 1. 离线闭环模式
 
-用于开发、回归测试和CI验证。该模式不创建真实Agent，不调用LLM API，而是用确定性的 mock 对局日志跑完整流程。
+用于开发、回归测试、答辩演示和CI验证。该模式不创建真实Agent，不调用LLM API，而是用确定性的 mock 对局日志跑完整流程。
 
 ```bash
 python run_evolution.py \
@@ -123,6 +123,8 @@ python run_evolution.py \
 - 验证"训练对局 -> 日志解析 -> 指标分析 -> 生成候选 -> A/B -> 接受/拒绝"闭环
 - 快速排查版本管理和元数据写入问题
 - 在没有API Key或网络不稳定时继续开发
+
+注意：mock 模式证明自进化机制可运行，不代表真实 LLM Agent 的实际胜率提升。真实效果证据需要使用 `live-fast` 或 `live` 模式评估。
 
 ### 2. dry-run 候选生成
 
@@ -260,8 +262,10 @@ logs/                    # 对局日志目录
 每个 `strategies/v*/metadata.json` 会记录：
 
 - `analysis_summary`：基于完成对局计算的胜率、角色指标和常见失误
+- `analysis_summary.quality_metrics`：规则修正、身份边界拦截、LLM fallback 等可解释 bad case 统计
 - `training_summary`：本轮训练请求数、完成数、超时数、失败数和失败类型
 - `role_optimizations`：各角色的优化理由和关键变更
+- `ab_result`：候选版本与父版本的 A/B 对战结果；候选只有通过后才会晋级为 `latest`
 
 训练失败或超时不会进入胜率分析，但会进入 `training_summary`，用于区分策略表现和运行环境问题。
 
@@ -342,6 +346,7 @@ print(f"优化后Prompt: {optimized['optimized']}")
 3. **统计显著性** - 确保有足够的A/B对局数来得出可靠结论
 4. **回滚能力** - 未接受的候选版本会保留文件，但 `latest.json` 会回滚到原版本
 5. **失败统计** - 失败和超时训练局不会进入胜率分析，只进入 `training_summary`
+6. **底牌边界** - 只有预言家本人和本局唯一授权悍跳狼可以跳预言家；其他角色越权声明会被守卫修正并进入质量指标
 
 ## 下一步
 

@@ -17,6 +17,8 @@ def parse_args():
     parser.add_argument("--improvement-threshold", type=float, default=0.0, help="Minimum candidate win-rate improvement required.")
     parser.add_argument("--game-runner", choices=["live", "live-fast", "mock"], default="live", help="Game runner to use for A/B games.")
     parser.add_argument("--game-timeout", type=float, default=300, help="Timeout in seconds for each game.")
+    parser.add_argument("--parallel-decisions", action="store_true", help="Allow concurrent decision calls inside each game.")
+    parser.add_argument("--decision-delay", type=float, default=None, help="Delay in seconds between serialized decision calls.")
     parser.add_argument("--strategy-dir", default=None, help="Strategy directory.")
     parser.add_argument("--log-dir", default=None, help="Log directory.")
     parser.add_argument("--output", default=None, help="Markdown report output path.")
@@ -45,6 +47,8 @@ async def main():
         log_dir=args.log_dir,
         min_successful_games=args.min_successful_games,
         improvement_threshold=args.improvement_threshold,
+        parallel_decisions=True if args.parallel_decisions else None,
+        decision_delay=args.decision_delay,
     )
     report = render_evaluation_report(evaluation)
 

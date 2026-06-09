@@ -1,7 +1,7 @@
 import asyncio
 
 from backend.core.logger import GameLogger
-from backend.core.models import Team
+from backend.core.models import Role, Team
 from backend.evolution.ab_testing import ABTesting
 
 
@@ -164,7 +164,94 @@ def test_run_single_game_uses_live_fast_options(tmp_path, monkeypatch):
     assert captured["kwargs"]["max_rounds"] == 1
     assert captured["kwargs"]["sleep_scale"] == 0.0
     assert captured["kwargs"]["skip_last_words"] is True
+    assert captured["kwargs"]["parallel_decisions"] is False
+    assert captured["kwargs"]["decision_delay"] == 2.0
     assert captured["kwargs"]["strategy_prompts"]["werewolf"] == "v0.0.1:werewolf"
+
+
+def test_run_single_game_can_override_live_fast_decision_pacing(tmp_path, monkeypatch):
+    captured = {}
+
+    class FakeWerewolfGame:
+        def __init__(self, player_names, logger, **kwargs):
+            captured["kwargs"] = kwargs
+            self.game_id = "fake-game"
+
+        async def run(self):
+            return Team.VILLAGERS
+
+    ab_testing = ABTesting(
+        strategy_dir=str(tmp_path / "strategies"),
+        game_runner="live-fast",
+        log_dir=str(tmp_path / "logs"),
+        parallel_decisions=True,
+        decision_delay=0.0,
+    )
+    ab_testing.version_control = type(
+        "FakeVersionControl",
+        (),
+        {"get_prompt": lambda self, version, role: None},
+    )()
+    monkeypatch.setattr("backend.engine.game.WerewolfGame", FakeWerewolfGame)
+
+    asyncio.run(
+        ab_testing._run_single_game(
+            "v0.0.1",
+            "v0.0.2",
+            ["Alice", "Bob", "Charlie", "David", "Eve", "Frank"],
+        )
+    )
+
+    assert captured["kwargs"]["parallel_decisions"] is True
+    assert captured["kwargs"]["decision_delay"] == 0.0
+
+
+def test_run_single_game_marks_llm_fallback_as_failed(tmp_path, monkeypatch):
+    class FallbackAgent:
+        role = Role.SEER
+        llm_failure_count = 2
+        llm_failure_errors = ["RateLimitError: 429", "TimeoutError: timed out"]
+
+    class FakeWerewolfGame:
+        def __init__(self, player_names, logger, **kwargs):
+            self.game_id = "fallback-game"
+            self.players = {"player_1": FallbackAgent()}
+
+        async def run(self):
+            return Team.VILLAGERS
+
+    ab_testing = ABTesting(
+        strategy_dir=str(tmp_path / "strategies"),
+        game_runner="live-fast",
+        log_dir=str(tmp_path / "logs"),
+    )
+    ab_testing.version_control = type(
+        "FakeVersionControl",
+        (),
+        {"get_prompt": lambda self, version, role: None},
+    )()
+    monkeypatch.setattr("backend.engine.game.WerewolfGame", FakeWerewolfGame)
+
+    result = asyncio.run(
+        ab_testing._run_single_game(
+            "v0.0.1",
+            "v0.0.2",
+            ["Alice", "Bob", "Charlie", "David", "Eve", "Frank"],
+        )
+    )
+
+    assert result["success"] is False
+    assert result["winner"] is None
+    assert result["observed_winner"] == "villagers"
+    assert result["error_type"] == "LLMFallbackUsed"
+    assert result["llm_failures"] == [
+        {
+            "player_id": "player_1",
+            "role": "seer",
+            "count": 2,
+            "errors": ["RateLimitError: 429", "TimeoutError: timed out"],
+        }
+    ]
 
 
 def test_statistical_significance_uses_exact_binomial_p_value():

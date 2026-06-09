@@ -19,7 +19,7 @@ class VillagerAgent(BaseAgent):
 
 重要规则：
 - 仔细听取其他玩家的发言，分析谁最可能是狼人
-- 不要轻易跳神职身份，避免被狼人盯上
+- 绝对禁止自称预言家、女巫或猎人；你没有查验、银水、毒药、枪口等夜间信息
 - 跟着好人阵营的思路投票
 - 发言要有逻辑，分析场上局势，至少3句话"""
 
@@ -33,7 +33,7 @@ class VillagerAgent(BaseAgent):
     async def make_speech(self, game_state):
         extra_instructions = """现在是白天发言阶段。
 请根据场上局势发言，分析谁最可能是狼人。
-作为村民，不要轻易跳神职身份，专注于分析。
+作为村民，只能以平民/闭眼好人视角发言；禁止跳预言家，禁止编造查验、金水或查杀。
 发言要有逻辑，不要太简短，至少3句话。"""
         
         action = await self._call_llm_for_action(game_state, "day_speech", extra_instructions)
