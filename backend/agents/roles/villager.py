@@ -34,6 +34,7 @@ class VillagerAgent(BaseAgent):
         extra_instructions = """现在是白天发言阶段。
 请根据场上局势发言，分析谁最可能是狼人。
 作为村民，只能以平民/闭眼好人视角发言；禁止跳预言家，禁止编造查验、金水或查杀。
+如果讨论预言家，只能说“某某声称预言家/某某报了查验”，再评价公开逻辑；不能说“我验、我的查验、我给金水/查杀”。
 发言要有逻辑，不要太简短，至少3句话。"""
         
         action = await self._call_llm_for_action(game_state, "day_speech", extra_instructions)

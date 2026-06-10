@@ -319,6 +319,33 @@ def test_game_assigns_exactly_one_fake_seer_wolf(tmp_path):
     assert authorized_wolves == [game.fake_seer_wolf_id]
 
 
+def test_nonseer_public_speech_prompt_blocks_first_person_check_claims():
+    villager = VillagerAgent("player_5", "Frank")
+    hunter = HunterAgent("player_6", "Grace")
+    witch = WitchAgent("player_4", "Eve")
+    wolf = WerewolfAgent("player_0", "Alice")
+
+    for agent in [villager, hunter, witch, wolf]:
+        instruction = agent._identity_boundary_instruction("day_speech")
+        assert "不是预言家" in instruction
+        assert "我验了" in instruction
+        assert "我的查验" in instruction
+        assert "别人声称/公开信息" in instruction
+
+
+def test_day_speech_rewrite_instruction_is_role_specific_and_natural():
+    witch = WitchAgent("player_4", "Eve")
+    instruction = witch._public_speech_rewrite_instruction(
+        "day_speech",
+        "现在是白天发言阶段。",
+    )
+
+    assert "重写一段自然可展示发言" in instruction
+    assert "以女巫视角发言" in instruction
+    assert "不能说“我验/我的查验/我给查杀/我给金水”" in instruction
+    assert "不要解释自己刚才说错了" in instruction
+
+
 def test_sheriff_speech_repair_does_not_treat_villager_screening_seer_as_claim():
     villager = VillagerAgent("player_3", "David")
     villager.add_conversation(
