@@ -446,6 +446,9 @@ class BaseAgent(ABC):
             seer_clause = "场上预言家信息只能以公开发言和遗言为准，我不会编造查验。"
 
         if action_type == "sheriff_speech":
+            if self.role != Role.SEER and not (self.role == Role.WEREWOLF and self.can_fake_seer):
+                return self._nonseer_sheriff_speech_repair(game_state, focus_names, seer_claimants)
+
             phase_variants = [
                 "我先把这一轮警徽票的判断标准说清楚。",
                 "我这轮先按已经听到的警上发言做比较。",
@@ -519,6 +522,59 @@ class BaseAgent(ABC):
             f"我现在重点听{villager_focus_clause}。"
             f"{closing_clause}"
         )
+
+    def _nonseer_sheriff_speech_repair(
+        self,
+        game_state: Dict[str, Any],
+        focus_names: List[str],
+        seer_claimants: List[str],
+    ) -> str:
+        if self.role == Role.WITCH:
+            opening = "我这轮上警不是跳预言家，也不会报查验，我只从女巫视角帮好人听发言。"
+            role_detail = "如果后面需要拍身份，我会围绕药水信息和公开发言解释，不会编造预言家视角。"
+        elif self.role == Role.HUNTER:
+            opening = "我上警不是跳预言家，也没有夜间查验，我先把听发言的标准放在这里。"
+            role_detail = "猎人牌更怕好人被带散票，所以我会重点盯谁在强行带节奏、谁在回避身份边界。"
+        elif self.role == Role.WEREWOLF:
+            opening = "我这轮按闭眼好人视角上警，不跳预言家，也不会报任何查验。"
+            role_detail = "我只看公开发言和票型，不用不存在的夜间信息压人。"
+        else:
+            opening = "我上警不是跳预言家，也没有夜间查验，先给警下一个听发言的参考。"
+            role_detail = "平民牌能做的就是把标准说清楚，后面根据公开发言更新站边。"
+
+        if seer_claimants:
+            claimant_text = "、".join(seer_claimants)
+            prior_nonseer = next((name for name in focus_names if name not in seer_claimants), None)
+            claimant_clause = (
+                f"现在{claimant_text}已经公开声称预言家，我会听他们的首验理由、警徽安排和前后逻辑是否自洽。"
+            )
+            if prior_nonseer:
+                focus_clause = (
+                    f"{prior_nonseer}如果只是普通上警发言，就要和真正起跳位区分开；"
+                    "后置位也别把评价预言家的人误当成对跳。"
+                )
+            else:
+                focus_clause = "后置位如果要站边，就要说清为什么信这个起跳位，而不是只复述查验结论。"
+            closing = "警下票先看谁的身份边界清楚、逻辑完整，再决定警徽给谁。"
+        elif focus_names:
+            if len(focus_names) >= 2:
+                focus_clause = (
+                    f"前面{focus_names[0]}和{focus_names[1]}都还没有给出硬信息，我先不急着站死边。"
+                    "我会听后置位有没有明确身份边界、上警目的和投票理由。"
+                )
+            else:
+                focus_clause = (
+                    f"{focus_names[0]}前面的发言我先记下，但现在还没有真正的预言家信息。"
+                    "后置位如果只喊自己能带队、不解释为什么上警，我会降低认可度。"
+                )
+            claimant_clause = "目前还没有明确的一人称预言家起跳，我不会空谈查验心路。"
+            closing = "这轮警徽票先看发言完整度和带队责任感，不是看谁先把话说满。"
+        else:
+            claimant_clause = "现在前置发言还不够，我不会凭空点人，也不会编造预言家信息。"
+            focus_clause = "后置位需要说清楚自己为什么上警、有没有身份边界、警下票应该看什么。"
+            closing = "我会把警徽票给发言最完整、能稳定带队的位置。"
+
+        return f"{opening}{claimant_clause}{focus_clause}{role_detail}{closing}"
 
     def _guard_public_speech_action(
         self,
