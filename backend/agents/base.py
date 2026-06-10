@@ -118,10 +118,12 @@ class BaseAgent(ABC):
                 role_instructions = (
                     "你是狼人，但本局没有被授权悍跳预言家。必须以普通好人/闭眼好人视角发言；"
                     "绝对不能自称预言家、女巫或猎人，不能编造查验、金水、银水、查杀或枪口。"
+                    "如果讨论预言家，只能引用别人公开声称的查验和警徽流，不能使用第一人称查验表达。"
                 )
         else:
             role_instructions = (
                 "你可以上警表达警徽票标准或争取带队，但不能自称预言家，不能编造查验、金水或查杀。"
+                "如果讨论预言家，只能引用别人公开声称的查验和警徽流，不能使用第一人称查验表达。"
                 "重点评价前面已经发过言的玩家、预言家声称、查验力度、警徽流是否自洽；"
                 "如果前面没人发言，就说明自己的警徽票判断标准和后续会重点听什么。"
             )
@@ -444,6 +446,9 @@ class BaseAgent(ABC):
             seer_clause = "场上预言家信息只能以公开发言和遗言为准，我不会编造查验。"
 
         if action_type == "sheriff_speech":
+            if self.role != Role.SEER and not (self.role == Role.WEREWOLF and self.can_fake_seer):
+                return self._nonseer_sheriff_speech_repair(game_state, focus_names, seer_claimants)
+
             phase_variants = [
                 "我先把这一轮警徽票的判断标准说清楚。",
                 "我这轮先按已经听到的警上发言做比较。",
@@ -518,6 +523,59 @@ class BaseAgent(ABC):
             f"{closing_clause}"
         )
 
+    def _nonseer_sheriff_speech_repair(
+        self,
+        game_state: Dict[str, Any],
+        focus_names: List[str],
+        seer_claimants: List[str],
+    ) -> str:
+        if self.role == Role.WITCH:
+            opening = "我这轮上警不是跳预言家，也不会报查验，我只从女巫视角帮好人听发言。"
+            role_detail = "如果后面需要拍身份，我会围绕药水信息和公开发言解释，不会编造预言家视角。"
+        elif self.role == Role.HUNTER:
+            opening = "我上警不是跳预言家，也没有夜间查验，我先把听发言的标准放在这里。"
+            role_detail = "猎人牌更怕好人被带散票，所以我会重点盯谁在强行带节奏、谁在回避身份边界。"
+        elif self.role == Role.WEREWOLF:
+            opening = "我这轮按闭眼好人视角上警，不跳预言家，也不会报任何查验。"
+            role_detail = "我只看公开发言和票型，不用不存在的夜间信息压人。"
+        else:
+            opening = "我上警不是跳预言家，也没有夜间查验，先给警下一个听发言的参考。"
+            role_detail = "平民牌能做的就是把标准说清楚，后面根据公开发言更新站边。"
+
+        if seer_claimants:
+            claimant_text = "、".join(seer_claimants)
+            prior_nonseer = next((name for name in focus_names if name not in seer_claimants), None)
+            claimant_clause = (
+                f"现在{claimant_text}已经公开声称预言家，我会听他们的首验理由、警徽安排和前后逻辑是否自洽。"
+            )
+            if prior_nonseer:
+                focus_clause = (
+                    f"{prior_nonseer}如果只是普通上警发言，就要和真正起跳位区分开；"
+                    "后置位也别把评价预言家的人误当成对跳。"
+                )
+            else:
+                focus_clause = "后置位如果要站边，就要说清为什么信这个起跳位，而不是只复述查验结论。"
+            closing = "警下票先看谁的身份边界清楚、逻辑完整，再决定警徽给谁。"
+        elif focus_names:
+            if len(focus_names) >= 2:
+                focus_clause = (
+                    f"前面{focus_names[0]}和{focus_names[1]}都还没有给出硬信息，我先不急着站死边。"
+                    "我会听后置位有没有明确身份边界、上警目的和投票理由。"
+                )
+            else:
+                focus_clause = (
+                    f"{focus_names[0]}前面的发言我先记下，但现在还没有真正的预言家信息。"
+                    "后置位如果只喊自己能带队、不解释为什么上警，我会降低认可度。"
+                )
+            claimant_clause = "目前还没有明确的一人称预言家起跳，我不会空谈查验心路。"
+            closing = "这轮警徽票先看发言完整度和带队责任感，不是看谁先把话说满。"
+        else:
+            claimant_clause = "现在前置发言还不够，我不会凭空点人，也不会编造预言家信息。"
+            focus_clause = "后置位需要说清楚自己为什么上警、有没有身份边界、警下票应该看什么。"
+            closing = "我会把警徽票给发言最完整、能稳定带队的位置。"
+
+        return f"{opening}{claimant_clause}{focus_clause}{role_detail}{closing}"
+
     def _guard_public_speech_action(
         self,
         action: AgentAction,
@@ -540,6 +598,50 @@ class BaseAgent(ABC):
         if action_type not in {"sheriff_speech", "day_speech", "pk_speech", "last_words"}:
             return False
         return self._is_illegal_nonseer_seer_claim(action.speech)
+
+    def _identity_boundary_instruction(self, action_type: str) -> str:
+        if action_type not in {"sheriff_speech", "day_speech", "pk_speech", "last_words"}:
+            return "严格尊重自己的底牌身份，不要输出与当前角色能力不符的信息。"
+        if self.role == Role.SEER:
+            return "你是预言家，只能报告你私人信息中真实存在的查验结果，不能编造额外查验。"
+        if self.role == Role.WEREWOLF and self.can_fake_seer:
+            return "你是本局唯一授权悍跳狼，可以伪装预言家，但必须前后一致，不能冒充其他具体玩家。"
+
+        role_name = {
+            Role.WEREWOLF: "未授权悍跳的狼人",
+            Role.WITCH: "女巫",
+            Role.HUNTER: "猎人",
+            Role.VILLAGER: "平民",
+        }.get(self.role, self.role.value)
+        return (
+            f"你是{role_name}，不是预言家。公开发言必须从自己的底牌视角出发："
+            "绝对禁止自称预言家、真预言家、唯一预言家、起跳/对跳预言家；"
+            "绝对禁止使用第一人称查验表达，例如“我验了”“昨晚我验”“我的查验”“我查验”“我给金水/查杀”；"
+            "可以评价别人公开声称的查验、警徽流和站边逻辑，但必须明确这是“别人声称/公开信息”，不是你的夜间信息。"
+        )
+
+    def _public_speech_rewrite_instruction(self, action_type: str, extra_instructions: str) -> str:
+        if self.role == Role.WITCH:
+            role_view = "以女巫视角发言；只能谈药水状态、银水/刀口信息和公开发言逻辑，不能报查验。"
+        elif self.role == Role.HUNTER:
+            role_view = "以猎人视角发言；可以谈开枪威慑、投票态度和公开身份对比，不能报查验。"
+        elif self.role == Role.WEREWOLF:
+            role_view = (
+                "以普通好人/闭眼好人视角伪装发言；你不是本局授权悍跳狼，不能跳预言家或神职。"
+                if not self.can_fake_seer
+                else "以授权悍跳预言家视角发言，保持对跳逻辑自洽。"
+            )
+        else:
+            role_view = "以平民/闭眼好人视角发言；只能分析公开发言、票型和身份声称，不能报查验。"
+
+        return (
+            f"{extra_instructions}\n\n"
+            "上一轮输出违反身份边界。请直接重写一段自然可展示发言，不要解释自己刚才说错了。"
+            f"{role_view}"
+            "如果场上有人跳预言家，只能说“某某声称预言家/某某报了查验”，再评价其逻辑；"
+            "不能说“我验/我的查验/我给查杀/我给金水”。"
+            "发言需要结合具体公开玩家和当前轮次，避免套话。"
+        )
 
     def _stable_variant_index(self, modulo: int) -> int:
         if modulo <= 1:
@@ -850,6 +952,7 @@ class BaseAgent(ABC):
             ("system", "你需要根据游戏状态做出决策。请以JSON格式输出，格式如下：\n{format_instructions}"),
             ("system", "{response_length_instruction}"),
             ("system", "{claim_consistency_instruction}"),
+            ("system", "{identity_boundary_instruction}"),
             ("user", "{game_state}\n\n当前需要做出的决策类型：{action_type}\n{extra_instructions}")
         ])
         
@@ -863,15 +966,11 @@ class BaseAgent(ABC):
                 "format_instructions": parser.get_format_instructions(),
                 "response_length_instruction": response_length_instruction,
                 "claim_consistency_instruction": self._claim_consistency_instruction(),
+                "identity_boundary_instruction": self._identity_boundary_instruction(action_type),
             })
             action = AgentAction(**result)
-            if action_type == "sheriff_speech" and self._needs_public_speech_repair(action, action_type):
-                correction_instructions = (
-                    f"{extra_instructions}\n\n"
-                    "上一轮输出违反身份规则：你不是预言家，不能自称预言家，不能报查验、金水或查杀。"
-                    "请重写一段自然的警上发言：只评价已经发过言的玩家、警徽票标准、预言家声称的查验心路和警徽流；"
-                    "如果前面没有足够发言，就说明后续听发言的标准。不要解释自己刚才说错了。"
-                )
+            if self._needs_public_speech_repair(action, action_type):
+                correction_instructions = self._public_speech_rewrite_instruction(action_type, extra_instructions)
                 corrected = await chain.ainvoke({
                     "game_state": self._format_game_state(game_state),
                     "action_type": action_type,
@@ -879,6 +978,7 @@ class BaseAgent(ABC):
                     "format_instructions": parser.get_format_instructions(),
                     "response_length_instruction": response_length_instruction,
                     "claim_consistency_instruction": self._claim_consistency_instruction(),
+                    "identity_boundary_instruction": self._identity_boundary_instruction(action_type),
                 })
                 action = AgentAction(**corrected)
             return self._guard_public_speech_action(action, game_state, action_type)

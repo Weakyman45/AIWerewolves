@@ -319,6 +319,33 @@ def test_game_assigns_exactly_one_fake_seer_wolf(tmp_path):
     assert authorized_wolves == [game.fake_seer_wolf_id]
 
 
+def test_nonseer_public_speech_prompt_blocks_first_person_check_claims():
+    villager = VillagerAgent("player_5", "Frank")
+    hunter = HunterAgent("player_6", "Grace")
+    witch = WitchAgent("player_4", "Eve")
+    wolf = WerewolfAgent("player_0", "Alice")
+
+    for agent in [villager, hunter, witch, wolf]:
+        instruction = agent._identity_boundary_instruction("day_speech")
+        assert "不是预言家" in instruction
+        assert "我验了" in instruction
+        assert "我的查验" in instruction
+        assert "别人声称/公开信息" in instruction
+
+
+def test_day_speech_rewrite_instruction_is_role_specific_and_natural():
+    witch = WitchAgent("player_4", "Eve")
+    instruction = witch._public_speech_rewrite_instruction(
+        "day_speech",
+        "现在是白天发言阶段。",
+    )
+
+    assert "重写一段自然可展示发言" in instruction
+    assert "以女巫视角发言" in instruction
+    assert "不能说“我验/我的查验/我给查杀/我给金水”" in instruction
+    assert "不要解释自己刚才说错了" in instruction
+
+
 def test_sheriff_speech_repair_does_not_treat_villager_screening_seer_as_claim():
     villager = VillagerAgent("player_3", "David")
     villager.add_conversation(
@@ -343,10 +370,10 @@ def test_sheriff_speech_repair_does_not_treat_villager_screening_seer_as_claim()
     }, "sheriff_speech")
 
     assert villager._public_seer_claimants() == ["Alice"]
-    assert "场上已有Alice的预言家声称" in guarded.speech
-    assert "场上已有Eve、Alice的预言家声称" not in guarded.speech
-    assert "Eve的警徽票标准和Alice的查验心路" in guarded.speech
-    assert "Eve如果只跟结论" not in guarded.speech
+    assert "Alice已经公开声称预言家" in guarded.speech
+    assert "Eve如果只是普通上警发言" in guarded.speech
+    assert "误当成对跳" in guarded.speech
+    assert "Eve的警徽票标准和Alice的查验心路" not in guarded.speech
     assert "我警上主要聊前置发言和警徽票标准" not in guarded.speech
 
 
@@ -368,8 +395,35 @@ def test_sheriff_speech_repair_does_not_invent_focus_without_prior_speeches():
     assert "Alice" not in guarded.speech
     assert "Bob" not in guarded.speech
     assert "前后置位" not in guarded.speech
-    assert "目前还没有足够前置发言可评价" in guarded.speech
-    assert "我会重点听后置位" in guarded.speech
+    assert "现在前置发言还不够" in guarded.speech
+    assert "不会凭空点人" in guarded.speech
+    assert "不会编造预言家信息" in guarded.speech
+    assert "查验心路" not in guarded.speech
+
+
+def test_nonseer_sheriff_repair_after_nonseer_prior_speech_is_natural():
+    villager = VillagerAgent("player_8", "Ivy")
+    villager.add_conversation(
+        "user",
+        "David: 我上警不是跳预言家，也没有夜间查验，先给警下一个听发言的参考。",
+    )
+    action = AgentAction(
+        reasoning="误跳预言家",
+        speech="我是预言家，昨晚我验了Frank是查杀，警徽给我。",
+    )
+
+    guarded = villager._guard_public_speech_action(action, {
+        "players": {
+            "player_3": {"name": "David", "is_alive": True, "role": "villager"},
+            "player_8": {"name": "Ivy", "is_alive": True, "role": "villager"},
+        }
+    }, "sheriff_speech")
+
+    assert "David前面的发言我先记下" in guarded.speech
+    assert "还没有真正的预言家信息" in guarded.speech
+    assert "不会空谈查验心路" in guarded.speech
+    assert "David刚才的警徽票标准、身份声称和后置位回应" not in guarded.speech
+    assert "我先从警徽流、查验心路和警下票收益三点来盘" not in guarded.speech
 
 
 def test_nonseer_sheriff_speech_prompt_focuses_on_previous_speeches():

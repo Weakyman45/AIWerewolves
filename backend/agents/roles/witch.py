@@ -147,6 +147,7 @@ class WitchAgent(BaseAgent):
 请根据场上局势发言。
 可以选择跳女巫身份，也可以隐藏身份。
 禁止跳预言家，禁止编造查验、金水或查杀；只能谈自己的女巫药水信息和公开发言逻辑。
+如果讨论预言家，只能说“某某声称预言家/某某报了查验”，再评价公开逻辑；不能说“我验、我的查验、我给金水/查杀”。
 发言要有逻辑，不要太简短，至少3句话。"""
         
         action = await self._call_llm_for_action(game_state, "day_speech", extra_instructions)
